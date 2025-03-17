@@ -77,11 +77,6 @@ def residuals(params, log_Teff_obs, log_L_obs, FeH, mass, log_Teff_err, log_L_er
 mass = 1.0
 FeH = -0.5
 
-#age = 7.7   #This is a lower giant branch star, where metalicity and age are degenerate. Great ages with mass!
-#age = 7.36    #This is a subgiant star. Metalicity and age are still degenerate!
-#age = 7.18    #This is another subgiant star, but closer to the turnoff. The lowest possible age error without mass.
-#age = 6.55    #This is a turnoff star - the edge of useable (10%) ages without mass.
-age = 5.5   #This is an upper main sequence star - still has a useable mass with age.
 ages = [7.7, 7.36, 7.18, 6.55, 5.5]
 symbols = ['rs', 'rx', 'ro', 'rx', 'rs']
 for age, symbol in zip(ages, symbols):
@@ -89,11 +84,19 @@ for age, symbol in zip(ages, symbols):
     plt.plot(log_Teff_obs, log_L_obs, symbol)
 plt.tight_layout()
 
+#Comment out the line you want to test for printed output.
+#age = 7.7   #This is a lower giant branch star, where metalicity and age are degenerate. Great ages with mass!
+#age = 7.36    #This is a subgiant star. Metalicity and age are still degenerate!
+age = 7.18    #This is another subgiant star, but closer to the turnoff. The lowest possible age error without mass. 4.6% without mass, 3.2% with mass.
+#age = 6.55    #This is a turnoff star - the edge of useable (10%) ages without mass.
+#age = 5.5   #This is an upper main sequence star - still has a useable mass with age.
+
+
 log_Teff_obs, log_L_obs = get_log_Teff_log_L(mass, FeH, age)
 log_Teff_err = 0.005
 log_L_err = 0.01
 Fe_H_err = 0.07
-mass_err = 0.02
+mass_err = 10.02 #Change this to a big number to have fitting without mass.
 initial_guess = [mass + np.random.normal(scale=0.01), FeH+ np.random.normal(scale=0.01), age+ np.random.normal(scale=0.0005)]
 fit = least_squares(residuals, initial_guess, args=(log_Teff_obs, log_L_obs, FeH, mass, log_Teff_err, log_L_err, Fe_H_err, mass_err), x_scale=[0.01, 0.01, 0.0005])
 print(fit)
