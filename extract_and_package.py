@@ -8,7 +8,7 @@ import os
 import glob
 from urllib.request import urlretrieve
 
-already_downloaded = False
+already_downloaded = True
 
 # Make a downloads directory if it doesn't exist
 if not os.path.exists('downloads'):
@@ -22,9 +22,10 @@ if not already_downloaded:
     # Download the data from the MIST website, using urlretrieve
     metstrs = ['m1.50', 'm1.25', 'm1.00', 'm0.75', 'm0.50', 'm0.25', 'p0.00', 'p0.25', 'p0.50']
     for metstr in metstrs:
-        url = 'https://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/MIST_v1.2_feh_' + metstr + '_afe_p0.0_vvcrit0.0_EEPS.txz'
+        fname = 'MIST_v1.2_feh_' + metstr + '_afe_p0.0_vvcrit0.0_EEPS.txz'
+        url = 'https://waps.cfa.harvard.edu/MIST/data/tarballs_v1.2/' + fname
         print('Downloading ' + url)
-        urlretrieve(url)    
+        urlretrieve(url, fname)  
     # Extract the data from the gzipped tar files in the downloads directory. 
     txz_files = glob.glob('*.txz')
     for txz_file in txz_files:
@@ -37,7 +38,7 @@ if not already_downloaded:
 
 # Lets start by defining the grid in fractional star age. For a solar-mass star, resolving
 # the upper giant branch needs 1 part in 1000.
-fractional_star_age = np.arange(0.001, 1, 0.001)
+fractional_star_age = np.arange(0.001, 1, 0.0005)
 dirs = glob.glob('MIST_v1.2_feh_*EEPS')
 
 # Find the metallicity grid strings from the filenames
