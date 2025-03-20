@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import RegularGridInterpolator
 from scipy.optimize import least_squares
+import bcutil
 plt.ion()
 
 # Load the fits file, converting yr to Gyr as we go for simplicity
@@ -30,17 +31,23 @@ ff.close()
 # 0.6, 1.0, 1.4 solar masses. Probably this should be a Gaia density plot!
 plt.figure(1)
 plt.clf()
+
 for i, (metallicity, linestyle) in enumerate(zip([-1, -0.5, 0], [':', '--', '-'])):
-    for j, mass in enumerate([0.6, 1.0, 1.4]):
+    for j, mass in enumerate([0.8, 1.0, 1.2]):
         # Find the index of the mass and metallicity
         mass_index = np.where(mass_grid == mass)[0][0]
         metallicity_index = np.where(metallicity_grid == metallicity)[0][0]
         # Plot the HR diagram
-        max_ix = None
+        max_ix = -1
         if j==0:
-            max_ix = -5
-        plt.plot(log_Teff[mass_index, metallicity_index][7:max_ix], log_L[mass_index, metallicity_index][7:max_ix], \
-            label=f'M={mass}, [Fe/H]={metallicity}', color=f'C{j}', linestyle=linestyle)
+            max_ix = -4
+        Teff = 10**log_Teff[mass_index, metallicity_index][7:max_ix]
+        #log(g) is M/R^2, and T^4 = L/R^2, i.e. R^(-2) = T^4/L
+        logg = 4.44 + np.log10(mass) + 4*(log_Teff[mass_index, metallicity_index][7:max_ix] - np.log10(5770)) - log_L[mass_index, metallicity_index][7:max_ix]
+        vec = np.ones(len(Teff))
+        mags = bcutil.bcstar(np.zeros(len(Teff), dtype=str),Teff,logg,metallicity*vec,0.00*vec,filters='G3 BP3 RP3',retarr=True)
+        #plt.plot(, log_L[mass_index, metallicity_index][7:max_ix], \
+        #    label=f'M={mass}, [Fe/H]={metallicity}', color=f'C{j}', linestyle=linestyle)
 plt.xlabel('log(Teff)')
 plt.ylabel('log(L)')
 plt.axis([4.0, 3.58, -1, 2.5])
