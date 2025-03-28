@@ -1,4 +1,6 @@
 """
+Here is what is typed into the Gaia DR3 SQL interface to get the data:
+
 SELECT g.phot_bp_mean_mag, g.phot_rp_mean_mag, g.phot_g_mean_mag,tb.*
 FROM gaiadr3.gaia_source AS g
 JOIN gaiadr3.nss_two_body_orbit AS tb ON tb.source_id = g.source_id
@@ -22,6 +24,11 @@ dd = fits.getdata('1742325284998O-result.fits',1) #All Orbits
 abs_g_mag = dd['phot_g_mean_mag'] + 5*np.log10(dd['parallax']/100)
 bp_rp = dd['phot_bp_mean_mag'] - dd['phot_rp_mean_mag']
 sep = (dd['period']/365)**(2/3)*dd['parallax']
+
+#Find the stars that are in the right range on the HR diagram
+# and have a fractional parallax error of less than 0.7 percent.
+# and a fractioal period error of less than 1 percent.
+# and are observable in P116 from Paranal.
 ww= np.where((dd['phot_g_mean_mag']<10) & (abs_g_mag < 3.1) & (bp_rp>0.65) & \
 	(abs_g_mag>2*bp_rp-1.1) & (abs_g_mag<3*bp_rp + 0.7) & \
 	( sep > 4) & (dd['ra']<240) & (dd['dec']<20) &
@@ -29,13 +36,15 @@ ww= np.where((dd['phot_g_mean_mag']<10) & (abs_g_mag < 3.1) & (bp_rp>0.65) & \
 	( dd['parallax_error']/dd['parallax']<0.007) )[0]
 
 plt.clf()
-plt.hist2d(bp_rp, abs_g_mag, bins=40,range=[[0,2],[-0.5,5.5]], cmap='viridis', cmin=5, norm='log')
+plt.hist2d(bp_rp, abs_g_mag, bins=40,range=[[0,2],[-0.5,5.5]], cmap='Greys', cmin=5, norm='log')
 plt.plot(bp_rp[ww], abs_g_mag[ww], 'r.')
 plt.axis([0,2,5.5,-0.5])
 plt.xlabel('Bp-Rp')
 plt.ylabel('G')
 plt.tight_layout()
 
+# The list of targets will be written to a CSV file for uploading to
+# the ESO phase 1 tool.
 outfile = open('targets.csv', 'w')
 outfile.write('Name, RA, Dec, Mag\n')
 ss = np.argsort(dd[ww]['ra'])
