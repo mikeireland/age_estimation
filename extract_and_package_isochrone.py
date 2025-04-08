@@ -5,7 +5,6 @@ import numpy as np
 import os
 import glob
 from urllib.request import urlretrieve
-import matplotlib.pyplot as plt
 
 # Toggle for whether the files are already downloaded
 already_downloaded = True
@@ -28,8 +27,8 @@ if not already_downloaded:
 
 # If data is already downloaded
 if already_downloaded:
-    # Define the data directory (update this path to match your actual directory!)
-    data_path = r'C:\Users\cathe\ANU-Honours\MIST model fitting\data'
+    # Define the data directory as a subdirectory named "data" in the current working directory
+    data_path = os.path.join(os.getcwd(), 'data')
     
     # Verify the directory exists
     if not os.path.exists(data_path):
@@ -59,130 +58,95 @@ isochrone_files = np.array(isochrone_files)[sort_indices]
 # From the first isocrone file find the age grid
 # Read in the first isochrone file
 iso = Table.read(os.path.join(data_path, isochrone_files[0]), format='ascii.commented_header', header_start=-1)
-# Extract the unique values of iso['log10_isochrone_age_yr']
-# Somes of these only appear ones - maybe an floating point error. 
+# Extract the unique values of iso['log10_isochrone_age_yr'] 
 age_log_grid = np.array(np.unique(iso['log10_isochrone_age_yr']))
 
-# Find array of all initial masses, find initial masses that are unique within 0.1 percent to avoid floating point errors
-initial_mass_grid = np.array(np.unique(iso['initial_mass']))
 
-
-# For each row find the initial_mass, 
-# find all other rows with the same initial_mass value, 
-# find the maxmimum star_mass for that initial_mass value, 
-# and divide the star_mass in the working by that maximum star_mass value to get the fractional_mass.
-
-# Define function to find the maximum star_mass 
-def find_maximum_star_mass(iso):
-
-    # Initialise list to store maximum star_mass
-    star_max_mass_list = []
-
-    for index, initial_mass in enumerate(iso['initial_mass']):
-        # Find indicies of other apperences of the same initial mass values in the array within 0.1 percent to avoid floating point errors
-        initial_mass_index = np.where(np.isclose(iso['initial_mass'], initial_mass, rtol=0.001))[0]
-        # Find the maximum star_mass for that initial mass value    
-        star_max_mass = max(iso['star_mass'][initial_mass_index])
-        # Append to list
-        star_max_mass_list.append(star_max_mass)
-
-    return np.array(star_max_mass_list, dtype=np.float64)
-
-# Define function to calculate fractional mass for each row. This retuens an array of fractional mass values for each row in the isochrone file.
+# Define function to calculate the fractional mass at the given age and metallicity
 def calculate_fractional_mass(iso):
+    for age in age_log_grid:
+        # Find indcies of models at the same age
+        age_index = np.where(np.isclose(iso['log10_isochrone_age_yr'], age, rtol=0.01))[0]
 
-    # Initialise list to store fractional_mass
-    fractional_mass_list = []
+        # Maximum star mass 
+        max_star_mass = np.max(iso['star_mass'][age_index])
 
-    for index, initial_mass in enumerate(iso['initial_mass']):
-        # Find indicies of other apperences of the same initial mass values in the array within 0.1 percent to avoid floating point errors
-        initial_mass_index = np.where(np.isclose(iso['initial_mass'], initial_mass, rtol=0.001))[0]
-        # Find the maximum star_mass for that initial mass value    
-        star_max_mass = max(iso['star_mass'][initial_mass_index])
-        # Divide the star_mass in the working by that maximum star_mass value to get the fractional_mass   
-        fractional_mass = iso['star_mass'][index] / star_max_mass
-        # Append to list 
-        fractional_mass_list.append(fractional_mass)
+        # Calculate the fractional mass
+        fractional_mass = iso['star_mass'][age_index] / max_star_mass
 
-    return np.array(fractional_mass_list, dtype=np.float64)
-
-# Calculate the fractional mass for the first isochrone file
-fractional_mass = calculate_fractional_mass(iso)
-# Add the fractional mass to the isochrone file
-iso['fractional_mass'] = fractional_mass
-
-# Look at how fractional mass changes for a given initial mass and age
-
-    
-# Find all rows with the same initial mass value
-initial_mass = initial_mass_grid[90000]
-initial_mass_index = np.where(np.isclose(iso['initial_mass'], initial_mass, rtol=0.001))[0]
-# Find correspinding fractional mass values for that initial mass value
-fractional_mass = iso['fractional_mass'][initial_mass_index]
-# Find correspinding ages for that initial mass value
-age = iso['log10_isochrone_age_yr'][initial_mass_index]
-
-# Plot the fractional mass against age
-plt.scatter(10**age, fractional_mass, label=f'Initial mass: {initial_mass:.2f} M_sun')
-plt.xlabel('Age (yr)')
-plt.ylabel('Fractional mass')
-plt.legend()
-
-plt.show()
-
-# The fractional mass in general goes down with age, but when mass loss becomes significant there is a larger drop in fractional mass.
-# Identify when mass loss becomes important by finding the point when there is a large drop in fractional mass with age.
 
 # Define 3-D arrays to hold in input physical parameters of the models
-#star_mass = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
-#log_Teff = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
-#log_L = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
+log_Teff = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
+log_L = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
+star_mass = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
 # Define the 3-D arrays to hold the observations parameters from Gaia
-#Gaia_G_EDR3 = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
-#Gaia_BP_EDR3 = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
-#Gaia_RP_EDR3 = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
+Gaia_G_EDR3 = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
+Gaia_BP_EDR3 = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
+Gaia_RP_EDR3 = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
 
 # Loop over metallicity strings to find the right directory
-#for i, metallicity_string in enumerate(isochrone_files):
+for i, metallicity_string in enumerate(isochrone_files):
     # Open the isochrone file
-    #iso = Table.read(os.path.join(data_path, metallicity_string), format='ascii.commented_header', header_start=-1)
+    iso = Table.read(os.path.join(data_path, metallicity_string), format='ascii.commented_header', header_start=-1)
 
-    # Add new column for the fractional mass
-    #fractional_mass = calculate_fractional_mass(iso)
-    #iso['fractional_mass'] = fractional_mass
+    # Initialise fisr_age_index to 0
+    first_age_index = 0
 
-    # Cut out the models that are after mass loss becoming significant
-
+    # Create an empty fractional_mass column with default values (e.g., NaN)
+    iso['fractional_mass'] = np.full(len(iso), np.nan)
 
     # Loop over the ages
-    #for j, age in enumerate(age_log_grid):
-        # Find the index of the age in the isochrone file, array of all ages that match, also within 1 percent to avoid floating point errors
-        #age_index = np.where(np.isclose(iso['log10_isochrone_age_yr'], age, rtol=0.01))[0]
+    for j, age in enumerate(age_log_grid):
+        # Find the index of the age in the isochrone file, array of all ages that match, 
+        age_index = np.where(iso['log10_isochrone_age_yr'] == age)[0]
         
-        # Cut off those models at the specific age where the star_mass stars decreasing. 
+        # Remove models where mass loss becomes significant.
+        # This is where the initial mass is greater than the initial mass associated with the greatest star_mass at a given age
+        
+        # Maximum star mass 
+        max_star_mass = np.max(iso['star_mass'][age_index])
+
+        # Index of maximum star mass, this is the index in the array for the specific age. 
+        max_star_mass_index = np.argmax(iso['star_mass'][age_index])
+
+        # Find index of the the first apperence of the specific age in the isochrone file
+        age_first_index = np.where(iso['log10_isochrone_age_yr'] == age)[0][0]
+
+        # Find the index of the maximum star mass in the isochrone file
+        max_star_mass_index_in_file = age_first_index + max_star_mass_index
+        
+        # Calculate the fractional mass and add to file
+        fractional_mass = iso['star_mass'][age_index] / max_star_mass
+        iso['fractional_mass'][age_index] = fractional_mass
+        
+        # Remove rows after the maximum star mass index with the same age
+        iso.remove_rows(np.arange(max_star_mass_index_in_file+1, age_first_index+len(age_index)-1, 1))
+
+        # Recompute age_index after row removal
+        age_index = np.where(iso['log10_isochrone_age_yr'] == age)[0]
 
         # Interpolate to populate the defined fractional mass grid
-        #log_Teff[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['log_Teff'][age_index])
-        #log_L[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['log_L'][age_index])
-        #star_mass[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['star_mass'][age_index])
-        #Gaia_G_EDR3[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['Gaia_G_EDR3'][age_index])    
-        #Gaia_BP_EDR3[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['Gaia_BP_EDR3'][age_index])
-        #Gaia_RP_EDR3[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['Gaia_RP_EDR3'][age_index])
+        log_Teff[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['log_Teff'][age_index])
+        log_L[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['log_L'][age_index])
+        star_mass[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['star_mass'][age_index])
+        Gaia_G_EDR3[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['Gaia_G_EDR3'][age_index])    
+        Gaia_BP_EDR3[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['Gaia_BP_EDR3'][age_index])
+        Gaia_RP_EDR3[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['Gaia_RP_EDR3'][age_index])
 
 
 
 # Package into FITS file format
-#hdus = fits.HDUList()
-#hdus.append(fits.PrimaryHDU())
-#hdus.append(fits.ImageHDU(star_mass, name='star_mass'))
-#hdus.append(fits.ImageHDU(log_Teff, name='log_Teff'))
-#hdus.append(fits.ImageHDU(log_L, name='log_L'))
-#hdus.append(fits.ImageHDU(Gaia_G_EDR3, name='Gaia_G_EDR3'))
-#hdus.append(fits.ImageHDU(Gaia_BP_EDR3, name='Gaia_BP_EDR3'))
-#hdus.append(fits.ImageHDU(Gaia_RP_EDR3, name='Gaia_RP_EDR3'))
+hdus = fits.HDUList()
+hdus.append(fits.PrimaryHDU())
+hdus.append(fits.ImageHDU(log_Teff, name='log_Teff'))
+hdus.append(fits.ImageHDU(log_L, name='log_L'))
+hdus.append(fits.ImageHDU(star_mass, name='star_mass'))
+hdus.append(fits.ImageHDU(Gaia_G_EDR3, name='Gaia_G_EDR3'))
+hdus.append(fits.ImageHDU(Gaia_BP_EDR3, name='Gaia_BP_EDR3'))
+hdus.append(fits.ImageHDU(Gaia_RP_EDR3, name='Gaia_RP_EDR3'))
 # Add the age and metallicity and fractional mass as one dimensional arrays
-#hdus.append(fits.ImageHDU(age_log_grid, name='age_grid'))
-#hdus.append(fits.ImageHDU(metallicity_grid, name='metallicity_grid'))
-#hdus.append(fits.ImageHDU(fractional_mass_grid, name='fractional_mass_grid'))
+hdus.append(fits.ImageHDU(age_log_grid, name='age_grid'))
+hdus.append(fits.ImageHDU(metallicity_grid, name='metallicity_grid'))
+hdus.append(fits.ImageHDU(fractional_mass_grid, name='fractional_mass_grid'))
 # Write to fits file
-#hdus.writeto('isochrone_models.fits', overwrite=True)
+hdus.writeto('isochrone_models.fits', overwrite=True)
