@@ -61,20 +61,6 @@ iso = Table.read(os.path.join(data_path, isochrone_files[0]), format='ascii.comm
 # Extract the unique values of iso['log10_isochrone_age_yr'] 
 age_log_grid = np.array(np.unique(iso['log10_isochrone_age_yr']))
 
-
-# Define function to calculate the fractional mass at the given age and metallicity
-def calculate_fractional_mass(iso):
-    for age in age_log_grid:
-        # Find indcies of models at the same age
-        age_index = np.where(np.isclose(iso['log10_isochrone_age_yr'], age, rtol=0.01))[0]
-
-        # Maximum star mass 
-        max_star_mass = np.max(iso['star_mass'][age_index])
-
-        # Calculate the fractional mass
-        fractional_mass = iso['star_mass'][age_index] / max_star_mass
-
-
 # Define 3-D arrays to hold in input physical parameters of the models
 log_Teff = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
 log_L = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
@@ -120,10 +106,14 @@ for i, metallicity_string in enumerate(isochrone_files):
         iso['fractional_mass'][age_index] = fractional_mass
         
         # Remove rows after the maximum star mass index with the same age
-        iso.remove_rows(np.arange(max_star_mass_index_in_file+1, age_first_index+len(age_index)-1, 1))
+        iso.remove_rows(np.arange(max_star_mass_index_in_file+1, age_first_index+len(age_index), 1))
 
         # Recompute age_index after row removal
         age_index = np.where(iso['log10_isochrone_age_yr'] == age)[0]
+
+        # Drop to the debugger if j=80
+        #if j == 80:
+        #    import pdb; pdb.set_trace()
 
         # Interpolate to populate the defined fractional mass grid
         log_Teff[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['log_Teff'][age_index])
