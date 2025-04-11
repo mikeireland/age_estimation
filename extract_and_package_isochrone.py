@@ -19,7 +19,7 @@ if not already_downloaded:
     # Download files directly into the "data" directory
     metstrs = ['m4.00', 'm3.50', 'm3.00', 'm2.50', 'm2.00', 'm1.75', 'm1.50', 'm1.25', 'm1.00', 'm0.75', 'm0.50', 'p0.00', 'p0.25', 'p0.50']
     for metstr in metstrs:
-        fname = f'MIST_v1.2_feh_{metstr}_afe_p0.0_vvcrit0.0_UBVRIplus.iso.cmb'
+        fname = f'MIST_v1.2_feh_{metstr}_afe_p0.0_vvcrit0.0_UBVRIplus.iso.cmd'
         url = f'https://waps.cfa.harvard.edu/MIST/model_grids/isochrones/{fname}'
         dest_path = os.path.join(data_dir, fname)
         print(f'Downloading {url}')
