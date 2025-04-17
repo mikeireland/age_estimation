@@ -64,7 +64,7 @@ age_log_grid = np.array(np.unique(iso['log10_isochrone_age_yr']))
 # Define 3-D arrays to hold in input physical parameters of the models
 log_Teff = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
 log_L = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
-star_mass = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
+star_mass_max = np.zeros((len(metallicity_grid), len(age_log_grid)))
 # Define the 3-D arrays to hold the observations parameters from Gaia
 Gaia_G_EDR3 = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
 Gaia_BP_EDR3 = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
@@ -118,7 +118,7 @@ for i, metallicity_string in enumerate(isochrone_files):
         # Interpolate to populate the defined fractional mass grid
         log_Teff[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['log_Teff'][age_index])
         log_L[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['log_L'][age_index])
-        star_mass[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['star_mass'][age_index])
+        star_mass_max[i,j] = max_star_mass
         Gaia_G_EDR3[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['Gaia_G_EDR3'][age_index])    
         Gaia_BP_EDR3[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['Gaia_BP_EDR3'][age_index])
         Gaia_RP_EDR3[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['Gaia_RP_EDR3'][age_index])
@@ -130,7 +130,7 @@ hdus = fits.HDUList()
 hdus.append(fits.PrimaryHDU())
 hdus.append(fits.ImageHDU(log_Teff, name='log_Teff'))
 hdus.append(fits.ImageHDU(log_L, name='log_L'))
-hdus.append(fits.ImageHDU(star_mass, name='star_mass'))
+hdus.append(fits.ImageHDU(star_mass_max, name='star_mass'))
 hdus.append(fits.ImageHDU(Gaia_G_EDR3, name='Gaia_G_EDR3'))
 hdus.append(fits.ImageHDU(Gaia_BP_EDR3, name='Gaia_BP_EDR3'))
 hdus.append(fits.ImageHDU(Gaia_RP_EDR3, name='Gaia_RP_EDR3'))

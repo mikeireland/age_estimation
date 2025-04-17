@@ -23,22 +23,22 @@ Gaia_RP_EDR3 = ff['Gaia_RP_EDR3'].data
 ff.close()
 
 # Create interpolators for the parameters
-log_Teff_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), log_Teff,)
-log_L_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), log_L)
-star_mass_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), star_mass)
-Gaia_G_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), Gaia_G_EDR3)
-Gaia_BP_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), Gaia_BP_EDR3)
-Gaia_RP_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), Gaia_RP_EDR3)
+log_Teff_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), log_Teff,bounds_error=False)
+log_L_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), log_L,bounds_error=False)
+star_mass_max_interp = RegularGridInterpolator((metallicity_grid, age_grid), star_mass)
+Gaia_G_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), Gaia_G_EDR3,bounds_error=False)
+Gaia_BP_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), Gaia_BP_EDR3,bounds_error=False)
+Gaia_RP_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), Gaia_RP_EDR3,bounds_error=False)
 
 # Create function that returns log_Teff and log_L for a given mass, metallicity and age.
 def get_log_Teff_and_log_L(mass, metallicity, age):
-    
-    # Calculate the fractional mass 
-    # extract the function of star_mass over fractional mass for the given age and metallicity
-    star_mass_array = star_mass_interp((fractional_mass_grid, metallicity, age))
-    # Find the corresponding fractional mass for the given mass by interpolating
-    fractional_mass = np.interp(mass, star_mass_array.flatten(), fractional_mass_grid)
-
+    # Calculate the maximum star mass for the given metallicity and age
+    max_star_mass = star_mass_max_interp((metallicity, age))
+    # Check if the mass is greater than the maximum star mass
+    if mass > max_star_mass:
+        raise ValueError(f"Mass {mass} is greater than the maximum star mass {max_star_mass} for metallicity {metallicity} and age {age}.")
+    fractional_mass = mass / max_star_mass
+ 
     # Interpolate to get the log_Teff and log_L for the given mass, metallicity and age
     log_Teff = log_Teff_interp((fractional_mass, metallicity, age))
     log_L = log_L_interp((fractional_mass, metallicity, age))
@@ -46,12 +46,11 @@ def get_log_Teff_and_log_L(mass, metallicity, age):
 
 # Create funtion that returns the Gaia G, BP and RP magnitudes for a given mass, metallicity and age.
 def get_Gaia_magnitudes(mass, metallicity, age):
+    # Calculate the maximum star mass for the given metallicity and age
+    max_star_mass = star_mass_max_interp((metallicity, age))
     
-    # Calculate the fractional mass 
-    # extract the function of star_mass over fractional mass for the given age and metallicity
-    star_mass_array = star_mass_interp((fractional_mass_grid, metallicity, age))
     # Find the corresponding fractional mass for the given mass by interpolating
-    fractional_mass = np.interp(mass, star_mass_array.flatten(), fractional_mass_grid)
+    fractional_mass = mass / max_star_mass
 
     # Interpolate to get the Gaia G, BP and RP magnitudes for the given mass, metallicity and age
     Gaia_G_EDR3 = Gaia_G_EDR3_interp((fractional_mass, metallicity, age))
