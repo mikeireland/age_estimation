@@ -20,6 +20,8 @@ Gaia_G_EDR3 = ff['Gaia_G_EDR3'].data
 Gaia_BP_EDR3 = ff['Gaia_BP_EDR3'].data
 Gaia_RP_EDR3 = ff['Gaia_RP_EDR3'].data
 # Close the fits file
+
+# Cut off stars younger than a few million years 
 ff.close()
 
 # Create interpolators for the parameters
@@ -29,6 +31,7 @@ star_mass_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_gr
 Gaia_G_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), Gaia_G_EDR3)
 Gaia_BP_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), Gaia_BP_EDR3)
 Gaia_RP_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), Gaia_RP_EDR3)
+
 
 # Create function that returns log_Teff and log_L for a given mass, metallicity and age.
 def get_log_Teff_and_log_L(mass, metallicity, age):
@@ -85,10 +88,10 @@ def residuals_Gaia(params, observed_Gaia_G_EDR3, observed_Gaia_BP_EDR3, observed
 
 # Set initial guess
 
-# Intrincsic parameters
-mass = 1.0 # Solar mass
-metallicity = -1.25 # dex
-age = 8.0 # log10(yr)
+# Intrinsic parameters
+mass = 1.0 # Solar mass 
+metallicity = 0 # dex mh_gspphot
+age = 8.0
 
 log_Teff_obs, log_L_obs = get_log_Teff_and_log_L(mass, metallicity, age)
 observed_Gaia_G_EDR3, observed_Gaia_BP_EDR3, observed_Gaia_RP_EDR3 = get_Gaia_magnitudes(mass, metallicity, age)
@@ -96,7 +99,7 @@ observed_Gaia_G_EDR3, observed_Gaia_BP_EDR3, observed_Gaia_RP_EDR3 = get_Gaia_ma
 log_Teff_err = 0.005
 log_L_err = 0.01
 
-# Gaia magnitude errors, will be propagated from parallax and apparent magnitude
+# Gaia magnitude errors, will be propagated from parallax and apparent magnitude asymmetric errors in magnitude space. 
 Gaia_G_EDR3_err = 0.05
 Gaia_BP_EDR3_err = 0.05
 Gaia_RP_EDR3_err = 0.05
@@ -126,7 +129,6 @@ print(f'Errors in mass (solar masses), [Fe/H] and age (Gyr): {errs[0]:.3f}, {err
 print(f'Fitted mass (solar masses), [Fe/H] and age (Gyr): {fit.x[0]:.3f}, {fit.x[1]:.3f}, {fit.x[2]:.3f}')
 print(f'Covariance matrix:\n{cov}')
 print(f'Correlation matrix:\n{correlation}')
-
 
 
 
