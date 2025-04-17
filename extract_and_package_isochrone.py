@@ -19,7 +19,7 @@ if not already_downloaded:
     # Download files directly into the "data" directory
     metstrs = ['m4.00', 'm3.50', 'm3.00', 'm2.50', 'm2.00', 'm1.75', 'm1.50', 'm1.25', 'm1.00', 'm0.75', 'm0.50', 'p0.00', 'p0.25', 'p0.50']
     for metstr in metstrs:
-        fname = f'MIST_v1.2_feh_{metstr}_afe_p0.0_vvcrit0.0_UBVRIplus.iso.cmb'
+        fname = f'MIST_v1.2_feh_{metstr}_afe_p0.0_vvcrit0.0_UBVRIplus.iso.cmd'
         url = f'https://waps.cfa.harvard.edu/MIST/model_grids/isochrones/{fname}'
         dest_path = os.path.join(data_dir, fname)
         print(f'Downloading {url}')
@@ -61,24 +61,10 @@ iso = Table.read(os.path.join(data_path, isochrone_files[0]), format='ascii.comm
 # Extract the unique values of iso['log10_isochrone_age_yr'] 
 age_log_grid = np.array(np.unique(iso['log10_isochrone_age_yr']))
 
-
-# Define function to calculate the fractional mass at the given age and metallicity
-def calculate_fractional_mass(iso):
-    for age in age_log_grid:
-        # Find indcies of models at the same age
-        age_index = np.where(np.isclose(iso['log10_isochrone_age_yr'], age, rtol=0.01))[0]
-
-        # Maximum star mass 
-        max_star_mass = np.max(iso['star_mass'][age_index])
-
-        # Calculate the fractional mass
-        fractional_mass = iso['star_mass'][age_index] / max_star_mass
-
-
 # Define 3-D arrays to hold in input physical parameters of the models
 log_Teff = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
 log_L = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
-star_mass = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
+star_mass_max = np.zeros((len(metallicity_grid), len(age_log_grid)))
 # Define the 3-D arrays to hold the observations parameters from Gaia
 Gaia_G_EDR3 = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
 Gaia_BP_EDR3 = np.zeros((len(fractional_mass_grid), len(metallicity_grid), len(age_log_grid)))
@@ -120,15 +106,19 @@ for i, metallicity_string in enumerate(isochrone_files):
         iso['fractional_mass'][age_index] = fractional_mass
         
         # Remove rows after the maximum star mass index with the same age
-        iso.remove_rows(np.arange(max_star_mass_index_in_file+1, age_first_index+len(age_index)-1, 1))
+        iso.remove_rows(np.arange(max_star_mass_index_in_file+1, age_first_index+len(age_index), 1))
 
         # Recompute age_index after row removal
         age_index = np.where(iso['log10_isochrone_age_yr'] == age)[0]
 
+        # Drop to the debugger if j=80
+        #if j == 80:
+        #    import pdb; pdb.set_trace()
+
         # Interpolate to populate the defined fractional mass grid
         log_Teff[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['log_Teff'][age_index])
         log_L[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['log_L'][age_index])
-        star_mass[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['star_mass'][age_index])
+        star_mass_max[i,j] = max_star_mass
         Gaia_G_EDR3[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['Gaia_G_EDR3'][age_index])    
         Gaia_BP_EDR3[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['Gaia_BP_EDR3'][age_index])
         Gaia_RP_EDR3[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['Gaia_RP_EDR3'][age_index])
@@ -140,7 +130,7 @@ hdus = fits.HDUList()
 hdus.append(fits.PrimaryHDU())
 hdus.append(fits.ImageHDU(log_Teff, name='log_Teff'))
 hdus.append(fits.ImageHDU(log_L, name='log_L'))
-hdus.append(fits.ImageHDU(star_mass, name='star_mass'))
+hdus.append(fits.ImageHDU(star_mass_max, name='star_mass'))
 hdus.append(fits.ImageHDU(Gaia_G_EDR3, name='Gaia_G_EDR3'))
 hdus.append(fits.ImageHDU(Gaia_BP_EDR3, name='Gaia_BP_EDR3'))
 hdus.append(fits.ImageHDU(Gaia_RP_EDR3, name='Gaia_RP_EDR3'))
