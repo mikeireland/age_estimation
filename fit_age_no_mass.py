@@ -4,15 +4,23 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import RegularGridInterpolator
 from scipy.optimize import least_squares
 import matplotlib.pyplot as plt
+import time
 
+# Parameters to make the fit better
+min_log_age = 7.5
 
 # Load fits file with isochrone models
 ff = fits.open('isochrone_models.fits')
+
+#-------------------------------------------------------
+# Index of minimum log age
+min_age_ix = np.where(ff['age_grid'].data >= min_log_age)[0][0]
 
 # Extract the individual data cubes from fits file
 fractional_mass_grid = ff['fractional_mass_grid'].data
 metallicity_grid = ff['metallicity_grid'].data
 age_grid = ff['age_grid'].data
+
 
 # Extract interpolated parameters from the fits file
 log_Teff = ff['log_Teff'].data
@@ -25,13 +33,20 @@ Gaia_RP_EDR3 = ff['Gaia_RP_EDR3'].data
 # Close the fits file
 ff.close()
 
-# Create interpolators for the parameters
-log_Teff_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), log_Teff,bounds_error=False)
-log_L_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), log_L,bounds_error=False)
-star_mass_max_interp = RegularGridInterpolator((metallicity_grid, age_grid), star_mass_max)
-Gaia_G_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), Gaia_G_EDR3,bounds_error=False)
-Gaia_BP_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), Gaia_BP_EDR3,bounds_error=False)
-Gaia_RP_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid), Gaia_RP_EDR3,bounds_error=False)
+# Create interpolators for the parameters. First, 3D interpolators
+log_Teff_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid[min_age_ix:]), 
+                                    log_Teff[:,:,min_age_ix:],bounds_error=False)
+log_L_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid[min_age_ix:]), 
+                                    log_L[:,:,min_age_ix:],bounds_error=False)
+Gaia_G_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid[min_age_ix:]),         
+                                    Gaia_G_EDR3[:,:,min_age_ix:],bounds_error=False)
+Gaia_BP_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid[min_age_ix:]), 
+                                    Gaia_BP_EDR3[:,:,min_age_ix:],bounds_error=False)
+Gaia_RP_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid[min_age_ix:]), 
+                                    Gaia_RP_EDR3[:,:,min_age_ix:],bounds_error=False)
+
+#Now a 2D interpolator for the maximum star mass
+star_mass_max_interp = RegularGridInterpolator((metallicity_grid, age_grid[min_age_ix:]), star_mass_max[:,min_age_ix:],bounds_error=False)
 
 # Create funtion that returns the Gaia G, BP and RP magnitudes for a given mass, metallicity and age.
 def get_Gaia_magnitudes(mass, metallicity, age):
@@ -62,44 +77,31 @@ def residuals_Gaia(params, observed_Gaia_G_EDR3, observed_Gaia_BP_EDR3, observed
 def initial_guess(metallicity_obs, G_mag_obs, BP_mag_obs, RP_mag_obs, G_mag_err, BP_mag_err, RP_mag_err):
 
     # Set up mass grid in physical units of solar mass
-    mass_grid = np.linspace(0.1, 20, 200)
-    log_age_grid = np.linspace(6.3, max(age_grid), 100)
+    mass_grid = np.linspace(0.1, 5, 100)
+    log_age_grid = np.linspace(7.5, max(age_grid), 50)
 
     # Initialise 2d array to hold chi2 values for the grid search
     mass_age_chi2_array = np.zeros((len(mass_grid), len(log_age_grid)))
 
     # Run grid search over mass and age for the given observed magnitudes as metallicity
-    for i, mass in enumerate(mass_grid): 
-        for j, age in enumerate(log_age_grid):
-
-            # Find the maximum mass correspinding to the given metallicity and age
-            max_mass = star_mass_max_interp((metallicity_obs, age))
-
-            # Calculate fractional mass 
-            frac_mass = mass/max_mass
-
-            # If the fractional mass is greater than one, the model will not be interpolated well
-            if frac_mass > 1:
-                # set chi2 to Nan and move to next grid spot
-                chi2 = np.nan
-
-                # Add chi2 value to 2d array 
-                mass_age_chi2_array[i][j] = chi2
-
-                # Skip to next age-mass combination
-                continue
+    for j, age in enumerate(log_age_grid):
+        # Find the maximum mass correspinding to the given metallicity and age
+        max_mass = star_mass_max_interp((metallicity_obs, age))
+        # Calculate fractional mass 
+        frac_mass = mass_grid/max_mass
+        mass_age_chi2_array[frac_mass > 1,j] = np.nan
         
-            # Find photometry of this age and mass
-            G_mag_model = Gaia_G_EDR3_interp((frac_mass, metallicity_obs, age))
-            BP_mag_model = Gaia_BP_EDR3_interp((frac_mass, metallicity_obs, age))
-            RP_mag_model = Gaia_RP_EDR3_interp((frac_mass, metallicity_obs, age))
+        # Find photometry of this age and mass
+        G_mag_model = Gaia_G_EDR3_interp((frac_mass, metallicity_obs, age))
+        BP_mag_model = Gaia_BP_EDR3_interp((frac_mass, metallicity_obs, age))
+        RP_mag_model = Gaia_RP_EDR3_interp((frac_mass, metallicity_obs, age))
 
-            # Find sum of chi2 values of this model
-            chi2 = ((G_mag_obs-G_mag_model)/G_mag_err)**2 + ((BP_mag_obs-BP_mag_model)**2/BP_mag_err)**2 + ((RP_mag_obs-RP_mag_model)**2/RP_mag_err)**2
+        # Find sum of chi2 values of this model
+        chi2 = ((G_mag_obs-G_mag_model)/G_mag_err)**2 + ((BP_mag_obs-BP_mag_model)**2/BP_mag_err)**2 + ((RP_mag_obs-RP_mag_model)**2/RP_mag_err)**2
 
-            # Add chi2 value to 2d array 
-            mass_age_chi2_array[i][j] = chi2
-
+        # Add chi2 value to 2d array 
+        mass_age_chi2_array[:,j] = chi2
+ 
     # Find age and mass of minimum chi2 value
     # Find index
     min_index = np.unravel_index(np.nanargmin(mass_age_chi2_array), mass_age_chi2_array.shape)
