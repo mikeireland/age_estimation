@@ -111,10 +111,6 @@ for i, metallicity_string in enumerate(isochrone_files):
         # Recompute age_index after row removal
         age_index = np.where(iso['log10_isochrone_age_yr'] == age)[0]
 
-        # Drop to the debugger if j=80
-        #if j == 80:
-        #    import pdb; pdb.set_trace()
-
         # Interpolate to populate the defined fractional mass grid
         log_Teff[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['log_Teff'][age_index])
         log_L[:,i,j] = np.interp(fractional_mass_grid, iso['fractional_mass'][age_index], iso['log_L'][age_index])

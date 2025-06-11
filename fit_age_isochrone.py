@@ -85,51 +85,19 @@ def residuals_Gaia(params, observed_Gaia_G_EDR3, observed_Gaia_BP_EDR3, observed
                           (params[1] - metallicity)/metallicity_err, (params[0] - mass)/mass_err])
     return residuals.flatten()
 
-# Set initial guess (without mass estimate)
-# Intrinsic parameters taken from isochrone 
-mass_intrin = 1.8091925608779658
-metallicity_intrin = -0.5
-age_intrin = 8.9000000000000004
+# Define function to run grid search over just age for observations with mass and metallicity 
+def initial_guess_mass(metallicity_obs, mass_obs, G_mag_obs, BP_mag_obs, RP_mag_obs, G_mag_err, BP_mag_err, RP_mag_err):
+    
+    # Set up age grid to check models for (don't use lowest age in the isohrone because those stars are still in star forming regions and surrounded by dust, meaning their observed magnitudes are not close to the intrinsic once as modelled by the isochrone)
+    log_age_grid = np.linspace(6.3, max(age_grid), 100)
 
-# Observed parameters
-mass_err = 0.01
-metallicity_err = 0.02
+    # Initiliase 1d array to hold chi2 values for the grid search
+    age_chi2_array = np.zeros(len(log_age_grid))
 
-mass_obs = mass_intrin + np.random.normal(scale=mass_err)
-metallicity_obs = metallicity_intrin + np.random.normal(scale=metallicity_err)
-
-# Average over errors for the Gaia nss 
-par_over_err = 85.78064
-g_flux_over_err = 6674.98225
-bp_flux_over_err = 3045.04454
-rp_flux_over_err = 3592.30083
-
-# Propagated errors for Gaia absolute magnitudes
-G_mag_err = 5/np.log(10) * np.sqrt((1/par_over_err)**2 + (1/(2*g_flux_over_err))**2)
-RP_mag_err = 5/np.log(10) * np.sqrt((1/par_over_err)**2 + (1/(2*bp_flux_over_err))**2)
-BP_mag_err = 5/np.log(10) * np.sqrt((1/par_over_err)**2 + (1/(2*rp_flux_over_err))**2)
-
-
-G_mag_obs = 1.436750 + np.random.normal(scale=G_mag_err)
-BP_mag_obs = 1.442280 + np.random.normal(scale=BP_mag_err)
-RP_mag_obs = 1.427353 + np.random.normal(scale=RP_mag_err)
-
-# Set up mass grid in physical units of solar mass
-mass_grid = np.linspace(1.1*10**-1, 20, 200)
-log_age_grid = np.linspace(min(age_grid), max(age_grid), 170)
-
-# Initialise 2d array to hold chi2 values for the grid search
-mass_age_chi2_array = np.zeros((len(mass_grid), len(log_age_grid)))
-
-# Run grid search over mass and age for the given observed magnitudes as metallicity
-for i, mass in enumerate(mass_grid): 
-    for j, age in enumerate(log_age_grid):
-
-        # Find the maximum mass correspinding to the given metallicity and age
+    for i, age in enumerate(log_age_grid):
+        # Calculate the fractional mass for the given mass and age
         max_mass = star_mass_max_interp((metallicity_obs, age))
-
-        # Calculate fractional mass 
-        frac_mass = mass/max_mass
+        frac_mass = mass_obs/max_mass
 
         # If the fractional mass is greater than one, the model will not be interpolated well
         if frac_mass > 1:
@@ -137,109 +105,327 @@ for i, mass in enumerate(mass_grid):
             chi2 = np.nan
 
             # Add chi2 value to 2d array 
-            mass_age_chi2_array[i][j] = chi2
+            age_chi2_array[i] = chi2
 
             # Skip to next age-mass combination
             continue
-        
-        # Find photometry of this age and mass
+        # Find the photometry of this model 
         G_mag_model = Gaia_G_EDR3_interp((frac_mass, metallicity_obs, age))
         BP_mag_model = Gaia_BP_EDR3_interp((frac_mass, metallicity_obs, age))
         RP_mag_model = Gaia_RP_EDR3_interp((frac_mass, metallicity_obs, age))
 
         # Find sum of chi2 values of this model
-        chi2 = ((G_mag_obs-G_mag_model)/G_mag_model)**2 + ((BP_mag_obs-BP_mag_model)**2/BP_mag_model)**2 + ((RP_mag_obs-RP_mag_model)**2/RP_mag_model)**2
+        chi2 = ((G_mag_obs-G_mag_model)/G_mag_err)**2 + ((BP_mag_obs-BP_mag_model)/BP_mag_err)**2 + ((RP_mag_obs-RP_mag_model)/RP_mag_err)**2
 
-        # Add chi2 value to 2d array 
-        mass_age_chi2_array[i][j] = chi2
-
-# Find age and mass of minimum chi2 value
-# Find index
-min_index = np.unravel_index(np.nanargmin(mass_age_chi2_array), mass_age_chi2_array.shape)
-mass_idx, age_idx = min_index
-
-# find corresponding mass and age values
-best_mass = mass_grid[mass_idx]
-best_log_age = log_age_grid[age_idx]
-
-print(f"Minimum chi2: {mass_age_chi2_array[mass_idx, age_idx]}")
-print(f"Best-fit mass: {best_mass:.4f} Msol")
-print(f"Best-fit log(age): {best_log_age:.4f}")
-
-
-# Set initial guess
-initial_guess = [best_mass, metallicity_obs, best_log_age]
-
-# Run fit
-fit = least_squares(residuals_Gaia, initial_guess, args=(G_mag_obs, BP_mag_obs, RP_mag_obs, G_mag_err, BP_mag_err, RP_mag_err, best_mass, mass_err, metallicity_obs, metallicity_err))
-
-# Find errors, covariance and correlation of the fit
-cov = np.linalg.inv(fit.jac.T.dot(fit.jac))
-errs = np.sqrt(np.diag(cov))
-correlation = cov / np.outer(errs, errs)
-
-print(f'True mass (solar masses), [Fe/H] and age (Gyr): {mass_intrin:.3f}, {metallicity_intrin:.3f}, {age_intrin:.3f}')
-print(f'Errors in mass (solar masses), [Fe/H] and age (Gyr): {errs[0]:.3f}, {errs[1]:.3f}, {errs[2]:.3f}')
-print(f'Fitted mass (solar masses), [Fe/H] and age (Gyr): {fit.x[0]:.3f}, {fit.x[1]:.3f}, {fit.x[2]:.3f}')
-
-
-# Run grid search over just age for observations with mass and metallicity 
-#initialise 1d array to hold chi2 values for the grid search
-age_chi2_array = np.zeros(len(log_age_grid))
-
-for i, age in enumerate(log_age_grid):
-    # Calculate the fractional mass for the given mass and age
-    max_mass = star_mass_max_interp((metallicity_obs, age))
-    frac_mass = mass_obs/max_mass
-
-    # If the fractional mass is greater than one, the model will not be interpolated well
-    if frac_mass > 1:
-        # set chi2 to Nan and move to next grid spot
-        chi2 = np.nan
-
-        # Add chi2 value to 2d array 
+        # Add to chi2 array 
         age_chi2_array[i] = chi2
 
-        # Skip to next age-mass combination
-        continue
-    # Find the photometry of this model 
-    G_mag_model = Gaia_G_EDR3_interp((frac_mass, metallicity_obs, age))
-    BP_mag_model = Gaia_BP_EDR3_interp((frac_mass, metallicity_obs, age))
-    RP_mag_model = Gaia_RP_EDR3_interp((frac_mass, metallicity_obs, age))
+    # Find the age corresponding to the minimum chi2 value
+    min_index = np.nanargmin(age_chi2_array)
+    best_log_age = log_age_grid[min_index]
 
-    # Find sum of chi2 values of this model
-    chi2 = ((G_mag_obs-G_mag_model)/G_mag_model)**2 + ((BP_mag_obs-BP_mag_model)**2/BP_mag_model)**2 + ((RP_mag_obs-RP_mag_model)**2/RP_mag_model)**2
+    return[mass_obs, metallicity_obs, best_log_age]
 
-    # Add to chi2 array 
-    age_chi2_array[i] = chi2
+# Plot age precision as a function of a single isochrone with and with out mass estimate
+def plot_age_precision(age, file, num_data):
+    from astropy.table import Table
+    import os
 
-# Find the age corresponding to the minimum chi2 value
-min_index = np.nanargmin(age_chi2_array)
-best_log_age = log_age_grid[min_index]
-print(f'fitted age estimate from mass and metallicity: {best_log_age:.4f}')
-# plot the chi2 values as a function of age
-plt.plot(log_age_grid, age_chi2_array)
-plt.yscale('log')
-plt.xlabel('log(age)')
-plt.ylabel('chi2')
-plt.title(f'Mass = {mass_obs:.2f} Msol, [Fe/H] = {metallicity_obs:.2f}')
+    iso = Table.read(os.path.join(os.getcwd(), 'data', file), format='ascii.commented_header', header_start=-1)
+    metallicity = 0 
+    metallicity_err = 0.02
+    
+    #Extract the portion of this isochrone for the same age
+    true_age = age # between 5.0 and 10.3
+    age_idx = np.where(np.abs(iso['log10_isochrone_age_yr'] - true_age) < 0.001)[0]
+
+    # Extract fundemental stellar parameters for this isochrone
+    #m_star = iso['star_mass'][age_idx]
+    #plt.plot(m_star)
+
+    # Find index where mass starts to decrease
+    #increasing_mask = np.diff(m_star) > 0.0
+    #print(increasing_mask)
+    #cutoff_index = np.argmax(~increasing_mask)
+
+    # Truncate to only the strictly increasing part !NEED TO MAKE THIS MORE ROBUST!
+    #age_idx = age_idx[:cutoff_index]
+    age_idx = age_idx[:num_data]
+    #Also only take every 8th point to speed up the fit and increase vsibility on the plot
+    age_idx = age_idx[::8]
+    
+    # Reextract the mass values for the truncated isochrone
+    m_star = iso['star_mass'][age_idx]
+
+    # Extract Gaia G, BP and RP magnitudes for this isochrone
+    G_mag = iso['Gaia_G_EDR3'][age_idx]
+    Bp_mag = iso['Gaia_BP_EDR3'][age_idx]
+    Rp_mag = iso['Gaia_RP_EDR3'][age_idx]
+
+    # Set mass and magnitude error to 1 percent
+    mass_err = 0.01 * m_star
+    G_mag_err = 0.1 
+    Bp_mag_err = 0.1 
+    Rp_mag_err = 0.1
+
+    # Observed parameters are the intrinsic ones with some noise
+    metallicity_obs = metallicity + np.random.normal(scale=metallicity_err)
+    mass_obs = m_star + np.random.normal(scale=mass_err, size=len(age_idx))
+    G_mag_obs = G_mag + np.random.normal(scale=G_mag_err, size=len(age_idx))
+    Bp_mag_obs = Bp_mag + np.random.normal(scale=Bp_mag_err, size=len(age_idx))
+    Rp_mag_obs = Rp_mag + np.random.normal(scale=Rp_mag_err, size=len(age_idx))
+
+    # Set bounds for the fit
+    bounds = (
+        [0.09, min(metallicity_grid), min(age_grid)],  # lower bounds
+        [20.0, max(metallicity_grid), max(age_grid)]  # upper bounds
+    )
+
+    ages_mass = []
+    age_errs_mass = []
+
+
+    # Run fit with mass in the guess
+    for i in range(len(age_idx)):
+
+        # Set intial guess for the fit
+        get_initial_guess = initial_guess_mass(metallicity_obs, mass_obs[i], G_mag_obs[i], Bp_mag_obs[i], Rp_mag_obs[i], G_mag_err, Bp_mag_err, Rp_mag_err)
+        print(f"Initial guess with mass: {get_initial_guess}")
+        # Make sure the initial guess for age is within the range of the isochrone
+        if get_initial_guess[2] < min(age_grid) or get_initial_guess[2] > max(age_grid):
+            # If the initial guess is outside the range, set it to the closest value in the grid
+            get_initial_guess[2] = np.clip(get_initial_guess[2], min(age_grid), max(age_grid))
+
+        # Run least square fit
+        fit = least_squares(residuals_Gaia, get_initial_guess, args=(G_mag_obs[i], Bp_mag_obs[i], Rp_mag_obs[i], G_mag_err, Bp_mag_err, Rp_mag_err, mass_obs[i], mass_err[i], metallicity_obs, metallicity_err), 
+                            bounds=bounds)
+
+        # Find errors and covariance of the fit
+        cov = np.linalg.inv(fit.jac.T.dot(fit.jac))
+        errs = np.sqrt(np.diag(cov))
+
+        # Append age error to list
+        age_errs_mass.append(errs[2])
+        #Append age to list
+        ages_mass.append(fit.x[2])
+
+    # Convert the lists to numpy arrays
+    ages_mass = np.array(ages_mass)
+    age_errs_mass = np.array(age_errs_mass)
+
+    #Only plot the points where the fitted age is correct within the error and error is less than 0.5
+    good_fit = (np.abs(ages_mass - true_age) < 2 * age_errs_mass) 
+    #& (age_errs_mass < 0.5)
+    return G_mag[good_fit], Bp_mag[good_fit] - Rp_mag[good_fit], age_errs_mass[good_fit]
+    # Plot the sigma difference from the fitted age and the true age on a colour-magnitude diagram
+    cmd = plt.figure(figsize=(5,5))
+
+    ax2 = cmd.add_subplot(1,1,1)
+    sc2 = ax2.scatter(G_mag[good_fit], Bp_mag[good_fit] - Rp_mag[good_fit], c=age_errs_mass[good_fit], s=2/age_errs_mass[good_fit], alpha=0.5, edgecolors='black', linewidths=0.5, 
+                      cmap='viridis', 
+                      vmin=0, vmax=max(age_errs_mass[good_fit]))
+    ax2.set_xlabel('Bp - Rp')
+    ax2.set_ylabel('G')
+    ax2.invert_yaxis()
+    ax2.set_title('Age estimate with mass')
+    cb2 = cmd.colorbar(sc2, ax=ax2)
+    cb2.set_label('sigma age')
+
+
+    plt.show()
+
+#plot_age_precision(10.3, 'MIST_v1.2_feh_p0.00_afe_p0.0_vvcrit0.0_UBVRIplus.iso.cmd', 280)
+
+# Get age and age error for input data of multiple isochrones
+def get_age_precision(age, file):
+    from astropy.table import Table
+    import os
+
+
+    iso = Table.read(os.path.join(os.getcwd(), 'data', file), format='ascii.commented_header', header_start=-1)
+    metallicity = 0 
+    metallicity_err = 0.02
+
+    #Extract the portion of this isochrone for the same age
+    true_age = age # between 5.0 and 10.3
+    age_idx = np.where(iso['log10_isochrone_age_yr'] == true_age)[0]
+
+    split = int(len(age_idx)/4)
+    # Remove stars beyond the max_star_mass_index for the current age
+    #max_star_mass_idx = np.argmax(iso['star_mass'][age_idx])
+
+    #age_idx = age_idx[:max_star_mass_idx]
+
+    age_idx=age_idx[:split]
+
+    m_star = iso['star_mass'][age_idx]
+    #Only take every 8th point to speed up the fit and increase visibility on the plot
+    #age_idx = age_idx[::2]
+    
+    # Reextract the mass values for the truncated isochrone
+    m_star = iso['star_mass'][age_idx]
+
+    # Extract Gaia G, BP and RP magnitudes for this isochrone
+    G_mag = iso['Gaia_G_EDR3'][age_idx]
+    Bp_mag = iso['Gaia_BP_EDR3'][age_idx]
+    Rp_mag = iso['Gaia_RP_EDR3'][age_idx]
+
+    # Set mass and magnitude error to 1 percent
+    mass_err = 0.01 * m_star
+    G_mag_err = 0.1 
+    Bp_mag_err = 0.1 
+    Rp_mag_err = 0.1
+
+    # Observed parameters are the intrinsic ones with some noise
+    metallicity_obs = metallicity + np.random.normal(scale=metallicity_err)
+    mass_obs = m_star + np.random.normal(scale=mass_err, size=len(age_idx))
+    G_mag_obs = G_mag + np.random.normal(scale=G_mag_err, size=len(age_idx))
+    Bp_mag_obs = Bp_mag + np.random.normal(scale=Bp_mag_err, size=len(age_idx))
+    Rp_mag_obs = Rp_mag + np.random.normal(scale=Rp_mag_err, size=len(age_idx))
+
+    # Set bounds for the fit
+    bounds = (
+        [0.09, min(metallicity_grid), min(age_grid)],  # lower bounds
+        [20.0, max(metallicity_grid), max(age_grid)]  # upper bounds
+    )
+
+    # Initialise lists to hold fitted ages and errors
+    ages_mass = []
+    age_errs_mass = []
+
+    # Run fit with mass in the guess
+    for i in range(len(age_idx)):
+
+        # Set intial guess for the fit
+        get_initial_guess = initial_guess_mass(metallicity_obs, mass_obs[i], G_mag_obs[i], Bp_mag_obs[i], Rp_mag_obs[i], G_mag_err, Bp_mag_err, Rp_mag_err)
+        #print(f"Initial guess with mass: {get_initial_guess}")
+        # Make sure the initial guess for age is within the range of the isochrone
+        if get_initial_guess[2] < 6.3 or get_initial_guess[2] > max(age_grid):
+            # If the initial guess is outside the range, do not run the fit
+            get_initial_guess[2] = np.clip(get_initial_guess[2], min(age_grid), max(age_grid))
+            #continue
+
+        # Run least square fit
+        fit = least_squares(residuals_Gaia, get_initial_guess, args=(G_mag_obs[i], Bp_mag_obs[i], Rp_mag_obs[i], G_mag_err, Bp_mag_err, Rp_mag_err, mass_obs[i], mass_err[i], metallicity_obs, metallicity_err), 
+                                bounds=bounds)
+
+        # Find errors and covariance of the fit
+        cov = np.linalg.inv(fit.jac.T.dot(fit.jac))
+        errs = np.sqrt(np.diag(cov))
+
+        # Append age error to list
+        age_errs_mass.append(errs[2])
+        #Append age to list
+        ages_mass.append(fit.x[2])
+
+    # Convert the lists to numpy arrays
+    ages_mass = np.array(ages_mass)
+    age_errs_mass = np.array(age_errs_mass)
+
+    #Only plot the points where the fitted age is correct within the error and error is less than 0.5
+    good_fit = (np.abs(ages_mass - true_age) < 2 * age_errs_mass) & (age_errs_mass < 0.5)
+
+    return G_mag[good_fit], Bp_mag[good_fit], Rp_mag[good_fit], age_errs_mass[good_fit]
+
+#ages_to_fit = np.linspace(6.5, 9.0, 6)
+#fig, ax = plt.subplots()
+# Choose a colormap with enough distinct colors
+#cmap = plt.get_cmap('gist_rainbow', len(ages_to_fit))
+#norm = plt.Normalize(vmin=min(ages_to_fit), vmax=max(ages_to_fit))
+
+#for age in ages_to_fit:
+
+    G, BP, RP, age_err = get_age_precision(age, 'MIST_v1.2_feh_p0.00_afe_p0.0_vvcrit0.0_UBVRIplus.iso.cmd')
+
+    sc = ax.scatter(
+        BP - RP,
+        G,
+        c=[age] * len(G),  # Color by age
+        s=2/age_err,       # Size by inverse error
+        cmap=cmap,
+        norm=norm,
+        edgecolors='black',
+        linewidths=0.5, 
+        alpha=0.5,
+        label=f'log(age) = {age}'
+    )
+
+# Label and invert axis
+#ax.set_xlabel('Bp - Rp')
+#ax.set_ylabel('G')
+#ax.invert_yaxis()
+#plt.legend()
+#plt.show()
+
+# Ages to fit on plot
+ages_to_fit = np.arange(9.5, 10.2, 0.1)
+num_data = [330,310,300,280,290,280,270,270]
+
+fig, ax = plt.subplots()
+
+# Choose a colormap with enough distinct colors
+cmap = plt.get_cmap('gist_rainbow', len(ages_to_fit))
+norm = plt.Normalize(vmin=min(ages_to_fit), vmax=max(ages_to_fit))
+
+# Store handles for legends
+color_legend_handles = []
+
+for i, ages in enumerate(ages_to_fit):
+    g_mag, bp_rp, age_err = plot_age_precision(ages, 'MIST_v1.2_feh_p0.00_afe_p0.0_vvcrit0.0_UBVRIplus.iso.cmd', num_data[i]-30)
+
+    sc = ax.scatter(
+        bp_rp,
+        g_mag,
+        c=[ages] * len(g_mag),
+        s=4 / age_err,
+        cmap=cmap,
+        norm=norm,
+        edgecolors='black',
+        linewidths=0.5,
+        alpha=0.5,
+        label=None  # Prevent automatic legend
+    )
+
+    # One handle per age
+    color_legend_handles.append(
+        ax.scatter([], [], color=cmap(norm(ages)), label=f"{10**(ages-9):.1f}", s=40)
+    )
+
+# Size legend
+example_errors = [0.02, 0.05, 0.1, 0.2]
+size_legend_handles = [
+    ax.scatter([], [], s=4/err, edgecolors='black', facecolors='gray', label=f'±{err:.2f}')
+    for err in example_errors
+]
+
+# Create legends
+size_legend = ax.legend(
+    handles=size_legend_handles,
+    title="Age Error (dex)",
+    loc='upper left',
+    bbox_to_anchor=(1, 1),  # Adjust horizontal and vertical offset
+    borderaxespad=0.
+)
+
+color_legend = ax.legend(
+    handles=color_legend_handles,
+    title="Age (Gyr)",
+    loc='upper left',
+    bbox_to_anchor=(1, 0.65),  # Lower than size legend
+    borderaxespad=0.
+)
+
+# Add both legends to the plot
+ax.add_artist(size_legend)
+ax.add_artist(color_legend)
+
+# Axis labels and style
+ax.set_xlabel('Bp - Rp')
+ax.set_ylabel('G')
+ax.invert_yaxis()
+
+# Adjust to leave space for legends
+fig.tight_layout()
+plt.subplots_adjust(right=0.6)  # Increase margin to the right for both legends
+
 plt.show()
-
-# Run fit with this initial guess
-initial_guess = [mass_obs, metallicity_obs, best_log_age]
-
-# Run fit
-fit = least_squares(residuals_Gaia, initial_guess, args=(G_mag_obs, BP_mag_obs, RP_mag_obs, G_mag_err, BP_mag_err, RP_mag_err, mass_obs, mass_err, metallicity_obs, metallicity_err))
-
-# Find errors, covariance and correlation of the fit
-cov = np.linalg.inv(fit.jac.T.dot(fit.jac))
-errs = np.sqrt(np.diag(cov))
-correlation = cov / np.outer(errs, errs)
-
-print(f'True mass (solar masses), [Fe/H] and age (Gyr): {mass_intrin:.3f}, {metallicity_intrin:.3f}, {age_intrin:.3f}')
-print(f'Errors in mass (solar masses), [Fe/H] and age (Gyr): {errs[0]:.3f}, {errs[1]:.3f}, {errs[2]:.3f}')
-print(f'Fitted mass (solar masses), [Fe/H] and age (Gyr) with mass and ageS: {fit.x[0]:.3f}, {fit.x[1]:.3f}, {fit.x[2]:.3f}')
-
-
-
-
