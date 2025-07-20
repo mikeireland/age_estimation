@@ -89,7 +89,7 @@ def residuals_Gaia(params, observed_Gaia_G_EDR3, observed_Gaia_BP_EDR3, observed
 def initial_guess_mass(metallicity_obs, mass_obs, G_mag_obs, BP_mag_obs, RP_mag_obs, G_mag_err, BP_mag_err, RP_mag_err):
     
     # Set up age grid to check models for (don't use lowest age in the isohrone because those stars are still in star forming regions and surrounded by dust, meaning their observed magnitudes are not close to the intrinsic once as modelled by the isochrone)
-    log_age_grid = np.linspace(6.3, max(age_grid), 100)
+    log_age_grid = np.linspace(7.5, max(age_grid), 100)
 
     # Initiliase 1d array to hold chi2 values for the grid search
     age_chi2_array = np.zeros(len(log_age_grid))
@@ -126,306 +126,101 @@ def initial_guess_mass(metallicity_obs, mass_obs, G_mag_obs, BP_mag_obs, RP_mag_
 
     return[mass_obs, metallicity_obs, best_log_age]
 
-# Plot age precision as a function of a single isochrone with and with out mass estimate
-def plot_age_precision(age, file, num_data):
-    from astropy.table import Table
-    import os
+# define function to fit with the least square fit given the mass, metallcity and gaia magnitudes with corresponding errors
+def fit_age(feh, feh_err, mass, mass_err, G, G_err, Bp, Bp_err, Rp, Rp_err):
 
-    iso = Table.read(os.path.join(os.getcwd(), 'data', file), format='ascii.commented_header', header_start=-1)
-    metallicity = 0 
-    metallicity_err = 0.02
-    
-    #Extract the portion of this isochrone for the same age
-    true_age = age # between 5.0 and 10.3
-    age_idx = np.where(np.abs(iso['log10_isochrone_age_yr'] - true_age) < 0.001)[0]
+    # get the initial guess from grid search 
+    guess = initial_guess_mass(feh, mass, G, Bp, Rp, G_err, Bp_err, Rp_err)
 
-    # Extract fundemental stellar parameters for this isochrone
-    #m_star = iso['star_mass'][age_idx]
-    #plt.plot(m_star)
-
-    # Find index where mass starts to decrease
-    #increasing_mask = np.diff(m_star) > 0.0
-    #print(increasing_mask)
-    #cutoff_index = np.argmax(~increasing_mask)
-
-    # Truncate to only the strictly increasing part !NEED TO MAKE THIS MORE ROBUST!
-    #age_idx = age_idx[:cutoff_index]
-    age_idx = age_idx[:num_data]
-    #Also only take every 8th point to speed up the fit and increase vsibility on the plot
-    age_idx = age_idx[::8]
-    
-    # Reextract the mass values for the truncated isochrone
-    m_star = iso['star_mass'][age_idx]
-
-    # Extract Gaia G, BP and RP magnitudes for this isochrone
-    G_mag = iso['Gaia_G_EDR3'][age_idx]
-    Bp_mag = iso['Gaia_BP_EDR3'][age_idx]
-    Rp_mag = iso['Gaia_RP_EDR3'][age_idx]
-
-    # Set mass and magnitude error to 1 percent
-    mass_err = 0.01 * m_star
-    G_mag_err = 0.1 
-    Bp_mag_err = 0.1 
-    Rp_mag_err = 0.1
-
-    # Observed parameters are the intrinsic ones with some noise
-    metallicity_obs = metallicity + np.random.normal(scale=metallicity_err)
-    mass_obs = m_star + np.random.normal(scale=mass_err, size=len(age_idx))
-    G_mag_obs = G_mag + np.random.normal(scale=G_mag_err, size=len(age_idx))
-    Bp_mag_obs = Bp_mag + np.random.normal(scale=Bp_mag_err, size=len(age_idx))
-    Rp_mag_obs = Rp_mag + np.random.normal(scale=Rp_mag_err, size=len(age_idx))
-
-    # Set bounds for the fit
+    # Set bounds of least square fit (mass, metallicity, age)
     bounds = (
         [0.09, min(metallicity_grid), min(age_grid)],  # lower bounds
         [20.0, max(metallicity_grid), max(age_grid)]  # upper bounds
     )
 
-    ages_mass = []
-    age_errs_mass = []
-
-
-    # Run fit with mass in the guess
-    for i in range(len(age_idx)):
-
-        # Set intial guess for the fit
-        get_initial_guess = initial_guess_mass(metallicity_obs, mass_obs[i], G_mag_obs[i], Bp_mag_obs[i], Rp_mag_obs[i], G_mag_err, Bp_mag_err, Rp_mag_err)
-        print(f"Initial guess with mass: {get_initial_guess}")
-        # Make sure the initial guess for age is within the range of the isochrone
-        if get_initial_guess[2] < min(age_grid) or get_initial_guess[2] > max(age_grid):
-            # If the initial guess is outside the range, set it to the closest value in the grid
-            get_initial_guess[2] = np.clip(get_initial_guess[2], min(age_grid), max(age_grid))
-
-        # Run least square fit
-        fit = least_squares(residuals_Gaia, get_initial_guess, args=(G_mag_obs[i], Bp_mag_obs[i], Rp_mag_obs[i], G_mag_err, Bp_mag_err, Rp_mag_err, mass_obs[i], mass_err[i], metallicity_obs, metallicity_err), 
+    # Run least square fit
+    # Set mass error to half the fitted mass - can refine further
+    try:
+        fit = least_squares(residuals_Gaia, guess, args=(G, Bp, Rp, G_err, Bp_err, Rp_err, mass, mass_err, feh, feh_err), 
                             bounds=bounds)
+    except:
+        print(f'Fit failed for Fe_H={feh}, G={G}, Bp={Bp}, Rp={Rp}')
+        return np.array([np.nan, np.nan, np.nan]), np.array([np.nan, np.nan, np.nan])
 
-        # Find errors and covariance of the fit
-        cov = np.linalg.inv(fit.jac.T.dot(fit.jac))
-        errs = np.sqrt(np.diag(cov))
+    # Find errors and covariance of the fit
+    cov = np.linalg.inv(fit.jac.T.dot(fit.jac))
+    errs = np.sqrt(np.diag(cov))
 
-        # Append age error to list
-        age_errs_mass.append(errs[2])
-        #Append age to list
-        ages_mass.append(fit.x[2])
+    # Fitted parameters
+    fitted = fit.x
 
-    # Convert the lists to numpy arrays
-    ages_mass = np.array(ages_mass)
-    age_errs_mass = np.array(age_errs_mass)
+    return fitted, errs
 
-    #Only plot the points where the fitted age is correct within the error and error is less than 0.5
-    good_fit = (np.abs(ages_mass - true_age) < 2 * age_errs_mass) 
-    #& (age_errs_mass < 0.5)
-    return G_mag[good_fit], Bp_mag[good_fit] - Rp_mag[good_fit], age_errs_mass[good_fit]
-    # Plot the sigma difference from the fitted age and the true age on a colour-magnitude diagram
-    cmd = plt.figure(figsize=(5,5))
+# import fits file with isochrones 
+file = fits.open('isochrones_combined.fits')
+iso_comb = file[1].data
 
-    ax2 = cmd.add_subplot(1,1,1)
-    sc2 = ax2.scatter(G_mag[good_fit], Bp_mag[good_fit] - Rp_mag[good_fit], c=age_errs_mass[good_fit], s=2/age_errs_mass[good_fit], alpha=0.5, edgecolors='black', linewidths=0.5, 
-                      cmap='viridis', 
-                      vmin=0, vmax=max(age_errs_mass[good_fit]))
-    ax2.set_xlabel('Bp - Rp')
-    ax2.set_ylabel('G')
-    ax2.invert_yaxis()
-    ax2.set_title('Age estimate with mass')
-    cb2 = cmd.colorbar(sc2, ax=ax2)
-    cb2.set_label('sigma age')
+# Set error for magntiudes and metallicity 
+mag_err = 0.1
+feh_err = 0.1
 
+# Initialise lists to store fitted parameters
+mass_fitted_mass = []
+mass_fitted_feh = []
+mass_fitted_age = []
+mass_fitted_mass_err = []
+mass_fitted_feh_err = []
+mass_fitted_age_err = []
 
-    plt.show()
+for i in range(len(iso_comb['feh'])):
+    # extract rows fundemental parameters
+    true_age = iso_comb['log_age'][i]
+    true_feh = iso_comb['feh'][i]
+    true_mass = iso_comb['star_mass'][i]
 
-#plot_age_precision(10.3, 'MIST_v1.2_feh_p0.00_afe_p0.0_vvcrit0.0_UBVRIplus.iso.cmd', 280)
-
-# Get age and age error for input data of multiple isochrones
-def get_age_precision(age, file):
-    from astropy.table import Table
-    import os
-
-
-    iso = Table.read(os.path.join(os.getcwd(), 'data', file), format='ascii.commented_header', header_start=-1)
-    metallicity = 0 
-    metallicity_err = 0.02
-
-    #Extract the portion of this isochrone for the same age
-    true_age = age # between 5.0 and 10.3
-    age_idx = np.where(iso['log10_isochrone_age_yr'] == true_age)[0]
-
-    split = int(len(age_idx)/4)
-    # Remove stars beyond the max_star_mass_index for the current age
-    #max_star_mass_idx = np.argmax(iso['star_mass'][age_idx])
-
-    #age_idx = age_idx[:max_star_mass_idx]
-
-    age_idx=age_idx[:split]
-
-    m_star = iso['star_mass'][age_idx]
-    #Only take every 8th point to speed up the fit and increase visibility on the plot
-    #age_idx = age_idx[::2]
+    # Extract true gaia magnitudes
+    true_g = iso_comb['Gaia_G'][i]
+    true_bp = iso_comb['Gaia_BP'][i]
+    true_rp = iso_comb['Gaia_RP'][i]
     
-    # Reextract the mass values for the truncated isochrone
-    m_star = iso['star_mass'][age_idx]
+    # perturb true values by the noise
+    feh_in = np.random.normal(loc=true_feh, scale=feh_err)
+    mass_in =np.random.normal(loc=true_mass, scale=true_mass*0.01)
+    g_in = np.random.normal(loc=true_g, scale=mag_err)
+    bp_in = np.random.normal(loc=true_bp, scale=mag_err)
+    rp_in = np.random.normal(loc=true_rp, scale=mag_err)
 
-    # Extract Gaia G, BP and RP magnitudes for this isochrone
-    G_mag = iso['Gaia_G_EDR3'][age_idx]
-    Bp_mag = iso['Gaia_BP_EDR3'][age_idx]
-    Rp_mag = iso['Gaia_RP_EDR3'][age_idx]
+    # Run fit with no mass
+    try:
+        fitted, errs = fit_age(feh_in, feh_err, mass_in, true_mass*0.01, g_in, mag_err, bp_in, mag_err, rp_in, mag_err)
+    except Exception as e:
+        print(f"Fit failed for index {i}: {e}")
+        fitted = [np.nan, np.nan, np.nan]
+        errs = [np.nan, np.nan, np.nan]
 
-    # Set mass and magnitude error to 1 percent
-    mass_err = 0.01 * m_star
-    G_mag_err = 0.1 
-    Bp_mag_err = 0.1 
-    Rp_mag_err = 0.1
+    # Add fitted parameters and errors to the targets table
+    mass_fitted_mass.append(fitted[0])
+    mass_fitted_feh.append(fitted[1])
+    mass_fitted_age.append(fitted[2])
+    mass_fitted_mass_err.append(errs[0])
+    mass_fitted_feh_err.append(errs[1])
+    mass_fitted_age_err.append(errs[2])
 
-    # Observed parameters are the intrinsic ones with some noise
-    metallicity_obs = metallicity + np.random.normal(scale=metallicity_err)
-    mass_obs = m_star + np.random.normal(scale=mass_err, size=len(age_idx))
-    G_mag_obs = G_mag + np.random.normal(scale=G_mag_err, size=len(age_idx))
-    Bp_mag_obs = Bp_mag + np.random.normal(scale=Bp_mag_err, size=len(age_idx))
-    Rp_mag_obs = Rp_mag + np.random.normal(scale=Rp_mag_err, size=len(age_idx))
+    # print progress every 100 iterations
+    if i % 100 == 0:
+        print(f'Fitted {i} of {len(iso_comb['feh'])} targets')
 
-    # Set bounds for the fit
-    bounds = (
-        [0.09, min(metallicity_grid), min(age_grid)],  # lower bounds
-        [20.0, max(metallicity_grid), max(age_grid)]  # upper bounds
-    )
+# Convert targets to an Astropy Table to allow adding new columns
+from astropy.table import Table
+table = Table(iso_comb)
 
-    # Initialise lists to hold fitted ages and errors
-    ages_mass = []
-    age_errs_mass = []
+# Add the fitted parameters to the targets table
+table['mass_fitted_mass'] = mass_fitted_mass
+table['mass_fitted_feh'] = mass_fitted_feh
+table['mass_fitted_age'] = mass_fitted_age
+table['mass_fitted_mass_err'] = mass_fitted_mass_err
+table['mass_fitted_feh_err'] = mass_fitted_feh_err
+table['mass_fitted_age_err'] = mass_fitted_age_err
 
-    # Run fit with mass in the guess
-    for i in range(len(age_idx)):
-
-        # Set intial guess for the fit
-        get_initial_guess = initial_guess_mass(metallicity_obs, mass_obs[i], G_mag_obs[i], Bp_mag_obs[i], Rp_mag_obs[i], G_mag_err, Bp_mag_err, Rp_mag_err)
-        #print(f"Initial guess with mass: {get_initial_guess}")
-        # Make sure the initial guess for age is within the range of the isochrone
-        if get_initial_guess[2] < 6.3 or get_initial_guess[2] > max(age_grid):
-            # If the initial guess is outside the range, do not run the fit
-            get_initial_guess[2] = np.clip(get_initial_guess[2], min(age_grid), max(age_grid))
-            #continue
-
-        # Run least square fit
-        fit = least_squares(residuals_Gaia, get_initial_guess, args=(G_mag_obs[i], Bp_mag_obs[i], Rp_mag_obs[i], G_mag_err, Bp_mag_err, Rp_mag_err, mass_obs[i], mass_err[i], metallicity_obs, metallicity_err), 
-                                bounds=bounds)
-
-        # Find errors and covariance of the fit
-        cov = np.linalg.inv(fit.jac.T.dot(fit.jac))
-        errs = np.sqrt(np.diag(cov))
-
-        # Append age error to list
-        age_errs_mass.append(errs[2])
-        #Append age to list
-        ages_mass.append(fit.x[2])
-
-    # Convert the lists to numpy arrays
-    ages_mass = np.array(ages_mass)
-    age_errs_mass = np.array(age_errs_mass)
-
-    #Only plot the points where the fitted age is correct within the error and error is less than 0.5
-    good_fit = (np.abs(ages_mass - true_age) < 2 * age_errs_mass) & (age_errs_mass < 0.5)
-
-    return G_mag[good_fit], Bp_mag[good_fit], Rp_mag[good_fit], age_errs_mass[good_fit]
-
-#ages_to_fit = np.linspace(6.5, 9.0, 6)
-#fig, ax = plt.subplots()
-# Choose a colormap with enough distinct colors
-#cmap = plt.get_cmap('gist_rainbow', len(ages_to_fit))
-#norm = plt.Normalize(vmin=min(ages_to_fit), vmax=max(ages_to_fit))
-
-#for age in ages_to_fit:
-
-    G, BP, RP, age_err = get_age_precision(age, 'MIST_v1.2_feh_p0.00_afe_p0.0_vvcrit0.0_UBVRIplus.iso.cmd')
-
-    sc = ax.scatter(
-        BP - RP,
-        G,
-        c=[age] * len(G),  # Color by age
-        s=2/age_err,       # Size by inverse error
-        cmap=cmap,
-        norm=norm,
-        edgecolors='black',
-        linewidths=0.5, 
-        alpha=0.5,
-        label=f'log(age) = {age}'
-    )
-
-# Label and invert axis
-#ax.set_xlabel('Bp - Rp')
-#ax.set_ylabel('G')
-#ax.invert_yaxis()
-#plt.legend()
-#plt.show()
-
-# Ages to fit on plot
-ages_to_fit = np.arange(9.5, 10.2, 0.1)
-num_data = [330,310,300,280,290,280,270,270]
-
-fig, ax = plt.subplots()
-
-# Choose a colormap with enough distinct colors
-cmap = plt.get_cmap('gist_rainbow', len(ages_to_fit))
-norm = plt.Normalize(vmin=min(ages_to_fit), vmax=max(ages_to_fit))
-
-# Store handles for legends
-color_legend_handles = []
-
-for i, ages in enumerate(ages_to_fit):
-    g_mag, bp_rp, age_err = plot_age_precision(ages, 'MIST_v1.2_feh_p0.00_afe_p0.0_vvcrit0.0_UBVRIplus.iso.cmd', num_data[i]-30)
-
-    sc = ax.scatter(
-        bp_rp,
-        g_mag,
-        c=[ages] * len(g_mag),
-        s=4 / age_err,
-        cmap=cmap,
-        norm=norm,
-        edgecolors='black',
-        linewidths=0.5,
-        alpha=0.5,
-        label=None  # Prevent automatic legend
-    )
-
-    # One handle per age
-    color_legend_handles.append(
-        ax.scatter([], [], color=cmap(norm(ages)), label=f"{10**(ages-9):.1f}", s=40)
-    )
-
-# Size legend
-example_errors = [0.02, 0.05, 0.1, 0.2]
-size_legend_handles = [
-    ax.scatter([], [], s=4/err, edgecolors='black', facecolors='gray', label=f'±{err:.2f}')
-    for err in example_errors
-]
-
-# Create legends
-size_legend = ax.legend(
-    handles=size_legend_handles,
-    title="Age Error (dex)",
-    loc='upper left',
-    bbox_to_anchor=(1, 1),  # Adjust horizontal and vertical offset
-    borderaxespad=0.
-)
-
-color_legend = ax.legend(
-    handles=color_legend_handles,
-    title="Age (Gyr)",
-    loc='upper left',
-    bbox_to_anchor=(1, 0.65),  # Lower than size legend
-    borderaxespad=0.
-)
-
-# Add both legends to the plot
-ax.add_artist(size_legend)
-ax.add_artist(color_legend)
-
-# Axis labels and style
-ax.set_xlabel('Bp - Rp')
-ax.set_ylabel('G')
-ax.invert_yaxis()
-
-# Adjust to leave space for legends
-fig.tight_layout()
-plt.subplots_adjust(right=0.6)  # Increase margin to the right for both legends
-
-plt.show()
+# Save fitted parameters to the same fits file 
+table.write('isochrones_combined_mass.fits', format='fits', overwrite=True)
