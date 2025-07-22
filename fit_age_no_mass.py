@@ -66,14 +66,10 @@ def get_Gaia_magnitudes(mass, metallicity, age):
     return float(Gaia_G_EDR3), float(Gaia_BP_RP_EDR3)   #, float(Gaia_BP_EDR3), float(Gaia_RP_EDR3)
 
 # Create funtion to return the normalised difference between the observed and modelled Gaia G, BP and RP magnitudes
-def residuals_Gaia(params, observed_Gaia_G_EDR3, observed_Gaia_BP_EDR3, observed_Gaia_RP_EDR3, Gaia_G_EDR3_err, Gaia_BP_EDR3_err, Gaia_RP_EDR3_err, mass, mass_err, metallicity, metallicity_err):
+def residuals_Gaia(params, observed_Gaia_G_EDR3, observed_Gaia_BP_RP_EDR3, Gaia_G_EDR3_err, Gaia_BP_RP_EDR3_err, mass, mass_err, metallicity, metallicity_err):
     
     # Get the modelled Gaia G, BP and RP magnitudes for the given mass, metallicity and age
     model_Gaia_G_EDR3, model_Gaia_BP_RP_EDR3 = get_Gaia_magnitudes(*params)
-
-    # Get the observed colour
-    observed_Gaia_BP_RP_EDR3 = observed_Gaia_BP_EDR3 - observed_Gaia_RP_EDR3
-    Gaia_BP_RP_EDR3_err = Gaia_BP_EDR3_err + Gaia_RP_EDR3_err
 
     # Calculate the residuals
     residuals = np.array([(observed_Gaia_G_EDR3 - model_Gaia_G_EDR3)/Gaia_G_EDR3_err, (observed_Gaia_BP_RP_EDR3 - model_Gaia_BP_RP_EDR3)/Gaia_BP_RP_EDR3_err,
@@ -81,11 +77,7 @@ def residuals_Gaia(params, observed_Gaia_G_EDR3, observed_Gaia_BP_EDR3, observed
     return residuals.flatten()
 
 #Define function to get initial guess from metallicities
-def initial_guess(metallicity_obs, G_mag_obs, BP_mag_obs, RP_mag_obs, G_mag_err, BP_mag_err, RP_mag_err):
-
-    # Calculate the colour
-    BP_RP_obs = BP_mag_obs - RP_mag_obs
-    BP_RP_err = BP_mag_err + RP_mag_err
+def initial_guess(metallicity_obs, G_mag_obs, BP_RP_mag_obs, G_mag_err, BP_RP_mag_err):
 
     # Set up mass grid in physical units of solar mass
     mass_grid = np.linspace(0.1, 8, 100)
@@ -109,7 +101,7 @@ def initial_guess(metallicity_obs, G_mag_obs, BP_mag_obs, RP_mag_obs, G_mag_err,
 
 
         # Find sum of chi2 values of this model
-        chi2 = ((G_mag_obs-G_mag_model)/G_mag_err)**2 + ((BP_RP_obs-BP_RP_mag_model)/BP_RP_err)**2 
+        chi2 = ((G_mag_obs-G_mag_model)/G_mag_err)**2 + ((BP_RP_mag_obs-BP_RP_mag_model)/BP_RP_mag_err)**2 
 
         # Add chi2 value to 2d array 
         mass_age_chi2_array[:,j] = chi2
@@ -145,10 +137,10 @@ def initial_guess(metallicity_obs, G_mag_obs, BP_mag_obs, RP_mag_obs, G_mag_err,
     return (best_mass, metallicity_obs, best_log_age), mass_err
 
 # Define function to fit age for give metallicity and Gaia magitudes with errors:
-def fit_age(Fe_H, Fe_H_err, G, G_err, Bp, Bp_err, Rp, Rp_err):
+def fit_age(Fe_H, Fe_H_err, G, G_err, Bp_Rp, Bp_Rp_err):
 
     # get the initial guess from grid search 
-    guess, mass_err = initial_guess(Fe_H, G, Bp, Rp, G_err, Bp_err, Rp_err)
+    guess, mass_err = initial_guess(Fe_H, G, Bp_Rp, G_err, Bp_Rp_err)
 
     # Set bounds of least square fit (mass, metallicity, age)
     bounds = (
@@ -159,9 +151,9 @@ def fit_age(Fe_H, Fe_H_err, G, G_err, Bp, Bp_err, Rp, Rp_err):
     # Run least square fit
     # Set mass error to half the fitted mass - can refine further
     try:
-        fit = least_squares(residuals_Gaia, guess, args=(G, Bp, Rp, G_err, Bp_err, Rp_err, guess[0], mass_err, Fe_H, Fe_H_err), bounds=bounds)
+        fit = least_squares(residuals_Gaia, guess, args=(G, Bp_Rp, G_err, Bp_Rp_err, guess[0], mass_err, Fe_H, Fe_H_err), bounds=bounds)
     except:
-        print(f'Fit failed for Fe_H={Fe_H}, G={G}, Bp={Bp}, Rp={Rp}')
+        print(f'Fit failed for Fe_H={Fe_H}, G={G}, Bp-Rp={Bp_Rp}')
         return np.array([np.nan, np.nan, np.nan]), np.array([np.nan, np.nan, np.nan])
 
     # Find errors and covariance of the fit
@@ -174,136 +166,72 @@ def fit_age(Fe_H, Fe_H_err, G, G_err, Bp, Bp_err, Rp, Rp_err):
     return fitted, errs
 
 # Load the Gaia data from the fits file
-#sample = fits.open('isochrones_grid.fits')
-#targets = sample[1].data
+sample = fits.open('gaia_giants_spec_teff.fits')
+targets = sample[1].data
 
 # Close the fits file
-#sample.close()
+sample.close()
 
 # Set extinction coefficients for the Gaia bands
-#Rbp = 3.374
-#Rrp = 2.035
+Rbp = 3.374
+Rrp = 2.035
 
 # calulate extinction in each observation band
-#Ag = targets['ag_gspphot']
+Ag = targets['ag_gspphot']
  
-#Abp_man = Rbp/(Rbp-Rrp) * targets['ebpminrp_gspphot']
-#Arp_man = Rrp/(Rbp-Rrp) * targets['ebpminrp_gspphot']
+Abp_man = Rbp/(Rbp-Rrp) * targets['ebpminrp_gspphot']
+Arp_man = Rrp/(Rbp-Rrp) * targets['ebpminrp_gspphot']
 
-#Abp = np.where(np.isnan(targets['abp_gspphot']), Abp_man, targets['abp_gspphot'])
-#Arp = np.where(np.isnan(targets['arp_gspphot']), Arp_man, targets['arp_gspphot'])
+Abp = np.where(np.isnan(targets['abp_gspphot']), Abp_man, targets['abp_gspphot'])
+Arp = np.where(np.isnan(targets['arp_gspphot']), Arp_man, targets['arp_gspphot'])
 
 
 # Extract errors in extinction
-#Ag_err = np.max([np.abs(targets['ag_gspphot_lower']-Ag), np.abs(targets['ag_gspphot_upper']-Ag)], axis=0)
+Ag_err = np.max([np.abs(targets['ag_gspphot_lower']-Ag), np.abs(targets['ag_gspphot_upper']-Ag)], axis=0)
 
-#Abp_err_dir = np.max([np.abs(targets['abp_gspphot_lower']-Abp), np.abs(targets['abp_gspphot_upper']-Abp)], axis=0)
-#Arp_err_dir = np.max([np.abs(targets['arp_gspphot_lower']-Arp), np.abs(targets['arp_gspphot_upper']-Arp)], axis=0)
-#Abp_err_man = np.max([np.abs(targets['ebpminrp_gspphot_lower']*Rbp/(Rbp-Rrp) - Abp), np.abs(targets['ebpminrp_gspphot_upper']*Rbp/(Rbp-Rrp) - Abp)], axis=0)
-#Arp_err_man = np.max([np.abs(targets['ebpminrp_gspphot_lower']*Rrp/(Rbp-Rrp) - Arp), np.abs(targets['ebpminrp_gspphot_upper']*Rrp/(Rbp-Rrp) - Arp)], axis=0)
+Abp_err_dir = np.max([np.abs(targets['abp_gspphot_lower']-Abp), np.abs(targets['abp_gspphot_upper']-Abp)], axis=0)
+Arp_err_dir = np.max([np.abs(targets['arp_gspphot_lower']-Arp), np.abs(targets['arp_gspphot_upper']-Arp)], axis=0)
+Abp_err_man = np.max([np.abs(targets['ebpminrp_gspphot_lower']*Rbp/(Rbp-Rrp) - Abp), np.abs(targets['ebpminrp_gspphot_upper']*Rbp/(Rbp-Rrp) - Abp)], axis=0)
+Arp_err_man = np.max([np.abs(targets['ebpminrp_gspphot_lower']*Rrp/(Rbp-Rrp) - Arp), np.abs(targets['ebpminrp_gspphot_upper']*Rrp/(Rbp-Rrp) - Arp)], axis=0)
 
-#Abp_err = np.where(np.isnan(targets['abp_gspphot']), Abp_err_man, Abp_err_dir)
-#Arp_err = np.where(np.isnan(targets['arp_gspphot']), Arp_err_man, Arp_err_dir)
+Abp_err = np.where(np.isnan(targets['abp_gspphot']), Abp_err_man, Abp_err_dir)
+Arp_err = np.where(np.isnan(targets['arp_gspphot']), Arp_err_man, Arp_err_dir)
+
+bp_err = 2.5/np.log(10) * 1/targets['phot_bp_mean_flux_over_error']
+rp_err = 2.5/np.log(10) * 1/targets['phot_rp_mean_flux_over_error']
+redd_err = np.maximum(targets['ebpminrp_gspphot'] - targets['ebpminrp_gspphot_lower'], targets['ebpminrp_gspphot_upper']-targets['ebpminrp_gspphot'])
 
 # Format Gaia data into absolute magnitudes that are corrected for extinction
-#mg = targets['phot_g_mean_mag'] + 5*np.log10(targets['parallax']/100) - Ag 
+mg = targets['phot_g_mean_mag'] + 5*np.log10(targets['parallax']/100) - Ag 
 #mbp = targets['phot_bp_mean_mag'] + 5*np.log10(targets['parallax']/100) - Abp
 #mrp = targets['phot_rp_mean_mag'] + 5*np.log10(targets['parallax']/100) - Arp
+bp_rp = targets['phot_bp_mean_mag'] - targets['phot_rp_mean_mag']
 
 # Extrapolate flux error to magnitude error using over error in flux, parallax and extinction/redenning
-#mg_err = np.sqrt((2.5/np.log(10) * 1/targets['phot_g_mean_flux_over_error'])**2 + (5/np.log(10) * 1/targets['parallax_over_error'])**2 + (Ag_err)**2)
+mg_err = np.sqrt((2.5/np.log(10) * 1/targets['phot_g_mean_flux_over_error'])**2 + (5/np.log(10) * 1/targets['parallax_over_error'])**2 + (Ag_err)**2)
 #mbp_err = np.sqrt((2.5/np.log(10) * 1/targets['phot_bp_mean_flux_over_error'])**2 + (5/np.log(10) * 1/targets['parallax_over_error'])**2 + (Abp_err)**2)
 #mrp_err = np.sqrt((2.5/np.log(10) * 1/targets['phot_rp_mean_flux_over_error'])**2 + (5/np.log(10) * 1/targets['parallax_over_error'])**2 + (Arp_err)**2)
+bp_rp_err = bp_err + rp_err + redd_err
 
 # Extract the iron abundance, using photometrically derived values because the spectroscopically derived values are not given (can caluculate from [M/H] and [Fe/M] if needed, these are in dex so slghtly more complicated caluclation and involves error propagation). 
-#Fe_H = targets['mh_gspphot']
-#Fe_H_err = np.max([np.abs(targets['mh_gspphot_lower']-Fe_H), np.abs(targets['mh_gspphot_upper']-Fe_H)], axis=0)
+Fe_H = targets['mh_gspphot']
+Fe_H_err = np.max([np.abs(targets['mh_gspphot_lower']-Fe_H), np.abs(targets['mh_gspphot_upper']-Fe_H)], axis=0)
 
-
-# Initialise lists to store fitted parameters
-#fitted_mass = []
-#fitted_Fe_H = []
-#fitted_age = []
-#fitted_mass_err = []
-#fitted_Fe_H_err = []
-#fitted_age_err = []
-
-# We can now run the fit age function 
-#for i in range(len(Fe_H)):
-    
-    # run least square fit 
-    #try:
-        #fitted, errs = fit_age(Fe_H[i], Fe_H_err[i], mg[i], mg_err[i], mbp[i], mbp_err[i], mrp[i], mrp_err[i])
-    #except Exception as e:
-        #print(f"Fit failed for index {i}: {e}")
-        #fitted = [np.nan, np.nan, np.nan]
-        #errs = [np.nan, np.nan, np.nan]
-
-    # Add fitted parameters and errors to the targets table
-    #fitted_mass.append(fitted[0])
-    #fitted_Fe_H.append(fitted[1])
-    #fitted_age.append(fitted[2])
-    #fitted_mass_err.append(errs[0])
-    #fitted_Fe_H_err.append(errs[1])
-    #fitted_age_err.append(errs[2])
-
-    # print progress every 100 iterations
-    #if i % 100 == 0:
-        #print(f'Fitted {i} of {len(Fe_H)} targets')
-
-
-# Convert targets to an Astropy Table to allow adding new columns
-#targets_table = Table(targets)
-
-# Add the fitted parameters to the targets table
-#targets_table['fitted_mass'] = fitted_mass
-#targets_table['fitted_Fe_H'] = fitted_Fe_H
-#targets_table['fitted_age'] = fitted_age
-#targets_table['fitted_mass_err'] = fitted_mass_err
-#targets_table['fitted_Fe_H_err'] = fitted_Fe_H_err
-#targets_table['fitted_age_err'] = fitted_age_err
-
-# Save the targets table with fitted parameters to a new fits file
-#targets_table.write('gaia_giants_fitted_gt10per.fits', format='fits', overwrite=True)
-#print('Fitted parameters saved to gaia_giants_fitted_gt10per.fits')
-
-# Open combined isochrone file
-file = fits.open('isochrones_grid_bprp.fits')
-iso_comb = file[1].data
-file.close()
-
-# Set error for magntiudes and metallicity 
-mag_err = 0.01
-feh_err = 0.05
 
 # Initialise lists to store fitted parameters
 fitted_mass = []
-fitted_feh = []
+fitted_Fe_H = []
 fitted_age = []
 fitted_mass_err = []
-fitted_feh_err = []
+fitted_Fe_H_err = []
 fitted_age_err = []
 
-for i in range(len(iso_comb['feh'])):
-    # extract rows fundemental parameters
-    true_age = iso_comb['log_age'][i]
-    true_feh = iso_comb['feh'][i]
-    true_mass = iso_comb['star_mass'][i]
-
-    # Extract true gaia magnitudes
-    true_g = iso_comb['Gaia_G'][i]
-    true_bp = iso_comb['Gaia_BP'][i]
-    true_rp = iso_comb['Gaia_RP'][i]
-
-    # perturb true values by the noise
-    feh_in = np.random.normal(loc=true_feh, scale=feh_err)
-    g_in = np.random.normal(loc=true_g, scale=mag_err)
-    bp_in = np.random.normal(loc=true_bp, scale=mag_err)
-    rp_in = np.random.normal(loc=true_rp, scale=mag_err)
-
-    # Run fit with no mass
+# We can now run the fit age function 
+for i in range(len(Fe_H)):
+    
+    # run least square fit 
     try:
-        fitted, errs = fit_age(feh_in, feh_err, g_in, mag_err, bp_in, mag_err, rp_in, mag_err)
+        fitted, errs = fit_age(Fe_H[i], Fe_H_err[i], mg[i], mg_err[i], bp_rp[i], bp_rp_err[i])
     except Exception as e:
         print(f"Fit failed for index {i}: {e}")
         fitted = [np.nan, np.nan, np.nan]
@@ -311,32 +239,102 @@ for i in range(len(iso_comb['feh'])):
 
     # Add fitted parameters and errors to the targets table
     fitted_mass.append(fitted[0])
-    fitted_feh.append(fitted[1])
+    fitted_Fe_H.append(fitted[1])
     fitted_age.append(fitted[2])
     fitted_mass_err.append(errs[0])
-    fitted_feh_err.append(errs[1])
+    fitted_Fe_H_err.append(errs[1])
     fitted_age_err.append(errs[2])
-
 
     # print progress every 100 iterations
     if i % 100 == 0:
-        print(f'Fitted {i} of {len(iso_comb['feh'])} targets')
+        print(f'Fitted {i} of {len(Fe_H)} targets')
+
 
 # Convert targets to an Astropy Table to allow adding new columns
-table = Table(iso_comb)
+targets_table = Table(targets)
 
 # Add the fitted parameters to the targets table
-table['fitted_mass'] = fitted_mass
-table['fitted_feh'] = fitted_feh
-table['fitted_age'] = fitted_age
-table['fitted_mass_err'] = fitted_mass_err
-table['fitted_feh_err'] = fitted_feh_err
-table['fitted_age_err'] = fitted_age_err
+targets_table['fitted_mass'] = fitted_mass
+targets_table['fitted_Fe_H'] = fitted_Fe_H
+targets_table['fitted_age'] = fitted_age
+targets_table['fitted_mass_err'] = fitted_mass_err
+targets_table['fitted_Fe_H_err'] = fitted_Fe_H_err
+targets_table['fitted_age_err'] = fitted_age_err
+
+# Save the targets table with fitted parameters to a new fits file
+targets_table.write('gaia_giants_fitted_spec_teff.fits', format='fits', overwrite=True)
+print('Fitted parameters saved to gaia_giants_fitted_spec_teff.fits')
+
+# Open combined isochrone file
+#file = fits.open('isochrones_grid_bprp.fits')
+#iso_comb = file[1].data
+#file.close()
+
+# Set error for magntiudes and metallicity 
+#mag_err = 0.01
+#feh_err = 0.05
+
+# Initialise lists to store fitted parameters
+#fitted_mass = []
+#fitted_feh = []
+#fitted_age = []
+#fitted_mass_err = []
+#fitted_feh_err = []
+#fitted_age_err = []
+
+#for i in range(len(iso_comb['feh'])):
+    # extract rows fundemental parameters
+    #true_age = iso_comb['log_age'][i]
+    #true_feh = iso_comb['feh'][i]
+    #true_mass = iso_comb['star_mass'][i]
+
+    # Extract true gaia magnitudes
+    #true_g = iso_comb['Gaia_G'][i]
+    #true_bp = iso_comb['Gaia_BP'][i]
+    #true_rp = iso_comb['Gaia_RP'][i]
+
+    # perturb true values by the noise
+    #feh_in = np.random.normal(loc=true_feh, scale=feh_err)
+    #g_in = np.random.normal(loc=true_g, scale=mag_err)
+    #bp_in = np.random.normal(loc=true_bp, scale=mag_err)
+    #rp_in = np.random.normal(loc=true_rp, scale=mag_err)
+
+    # Run fit with no mass
+    #try:
+        #fitted, errs = fit_age(feh_in, feh_err, g_in, mag_err, bp_in, mag_err, rp_in, mag_err)
+    #except Exception as e:
+        #print(f"Fit failed for index {i}: {e}")
+        #fitted = [np.nan, np.nan, np.nan]
+        #errs = [np.nan, np.nan, np.nan]
+
+    # Add fitted parameters and errors to the targets table
+    #fitted_mass.append(fitted[0])
+    #fitted_feh.append(fitted[1])
+    #fitted_age.append(fitted[2])
+    #fitted_mass_err.append(errs[0])
+    #fitted_feh_err.append(errs[1])
+    #fitted_age_err.append(errs[2])
+
+
+    # print progress every 100 iterations
+    #if i % 100 == 0:
+        #print(f'Fitted {i} of {len(iso_comb['feh'])} targets')
+
+# Convert targets to an Astropy Table to allow adding new columns
+#table = Table(iso_comb)
+
+# Add the fitted parameters to the targets table
+#table['fitted_mass'] = fitted_mass
+#table['fitted_feh'] = fitted_feh
+#table['fitted_age'] = fitted_age
+#table['fitted_mass_err'] = fitted_mass_err
+#table['fitted_feh_err'] = fitted_feh_err
+#table['fitted_age_err'] = fitted_age_err
 
 # Also append true parameters for comparision
-table['true_mass'] = iso_comb['star_mass']
-table['true_age'] = iso_comb['log_age']
-table['true_feh'] = iso_comb['feh']
+#table['true_mass'] = iso_comb['star_mass']
+#table['true_age'] = iso_comb['log_age']
+#table['true_feh'] = iso_comb['feh']
 
 # Save fitted parameters to the same fits file 
-table.write('isochrones_grid_bprp_colour_fitted.fits', format='fits', overwrite=True)
+#table.write('isochrones_grid_bprp_colour_fitted.fits', format='fits', overwrite=True)
