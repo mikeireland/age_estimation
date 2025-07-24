@@ -152,8 +152,8 @@ def fit_age(Fe_H, Fe_H_err, G, G_err, Bp_Rp, Bp_Rp_err):
     # Set mass error to half the fitted mass - can refine further
     try:
         fit = least_squares(residuals_Gaia, guess, args=(G, Bp_Rp, G_err, Bp_Rp_err, guess[0], mass_err, Fe_H, Fe_H_err), bounds=bounds)
-    except:
-        print(f'Fit failed for Fe_H={Fe_H}, G={G}, Bp-Rp={Bp_Rp}')
+    except Exception as e:
+        print(f"Fit failed for index: {e}")
         return np.array([np.nan, np.nan, np.nan]), np.array([np.nan, np.nan, np.nan])
 
     # Find errors and covariance of the fit
@@ -166,7 +166,7 @@ def fit_age(Fe_H, Fe_H_err, G, G_err, Bp_Rp, Bp_Rp_err):
     return fitted, errs
 
 # Load the Gaia data from the fits file
-sample = fits.open('gaia_giants_spec_teff.fits')
+sample = fits.open('gaia_giants_test_sample.fits')
 targets = sample[1].data
 
 # Close the fits file
@@ -205,17 +205,17 @@ redd_err = np.maximum(targets['ebpminrp_gspphot'] - targets['ebpminrp_gspphot_lo
 mg = targets['phot_g_mean_mag'] + 5*np.log10(targets['parallax']/100) - Ag 
 #mbp = targets['phot_bp_mean_mag'] + 5*np.log10(targets['parallax']/100) - Abp
 #mrp = targets['phot_rp_mean_mag'] + 5*np.log10(targets['parallax']/100) - Arp
-bp_rp = targets['phot_bp_mean_mag'] - targets['phot_rp_mean_mag']
+bp_rp = targets['phot_bp_mean_mag'] - targets['phot_rp_mean_mag'] - targets['ebpminrp_gspphot']
 
 # Extrapolate flux error to magnitude error using over error in flux, parallax and extinction/redenning
-mg_err = np.sqrt((2.5/np.log(10) * 1/targets['phot_g_mean_flux_over_error'])**2 + (5/np.log(10) * 1/targets['parallax_over_error'])**2 + (Ag_err)**2)
+mg_err = np.sqrt((2.5/np.log(10) * 1/targets['phot_g_mean_flux_over_error'])**2 + (5/np.log(10) * targets['parallax_error']/targets['parallax'])**2 + (Ag_err)**2)
 #mbp_err = np.sqrt((2.5/np.log(10) * 1/targets['phot_bp_mean_flux_over_error'])**2 + (5/np.log(10) * 1/targets['parallax_over_error'])**2 + (Abp_err)**2)
 #mrp_err = np.sqrt((2.5/np.log(10) * 1/targets['phot_rp_mean_flux_over_error'])**2 + (5/np.log(10) * 1/targets['parallax_over_error'])**2 + (Arp_err)**2)
 bp_rp_err = bp_err + rp_err + redd_err
 
-# Extract the iron abundance, using photometrically derived values because the spectroscopically derived values are not given (can caluculate from [M/H] and [Fe/M] if needed, these are in dex so slghtly more complicated caluclation and involves error propagation). 
-Fe_H = targets['mh_gspphot']
-Fe_H_err = np.max([np.abs(targets['mh_gspphot_lower']-Fe_H), np.abs(targets['mh_gspphot_upper']-Fe_H)], axis=0)
+# Extract the iron abundance,
+Fe_H = targets['mh_gspspec']
+Fe_H_err = np.max([np.abs(targets['mh_gspspec_lower']-Fe_H), np.abs(targets['mh_gspspec_upper']-Fe_H)], axis=0)
 
 
 # Initialise lists to store fitted parameters
@@ -261,9 +261,15 @@ targets_table['fitted_mass_err'] = fitted_mass_err
 targets_table['fitted_Fe_H_err'] = fitted_Fe_H_err
 targets_table['fitted_age_err'] = fitted_age_err
 
+# Add identifying information to check stars that did not fit properly
+targets_table['g'] = mg
+targets_table['g_err'] = mg_err
+targets_table['bprp'] = bp_rp
+targets_table['bprp_err'] = bp_rp_err
+
 # Save the targets table with fitted parameters to a new fits file
-targets_table.write('gaia_giants_fitted_spec_teff.fits', format='fits', overwrite=True)
-print('Fitted parameters saved to gaia_giants_fitted_spec_teff.fits')
+targets_table.write('gaia_giants_fitted_test_colour.fits', format='fits', overwrite=True)
+print('Fitted parameters saved to gaia_giants_fitted_test_colour.fits')
 
 # Open combined isochrone file
 #file = fits.open('isochrones_grid_bprp.fits')
