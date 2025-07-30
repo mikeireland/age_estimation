@@ -75,7 +75,7 @@ for i, metallicity_string in enumerate(isochrone_files):
     # Open the isochrone file
     iso = Table.read(os.path.join(data_path, metallicity_string), format='ascii.commented_header', header_start=-1)
 
-    # Initialise fisr_age_index to 0
+    # Initialise first_age_index to 0
     first_age_index = 0
 
     # Create an empty fractional_mass column with default values (e.g., NaN)

@@ -20,13 +20,17 @@ mh_spec_cut = flux_precise_cut[~mh_spec_mask]
 print(f'number of sources with a spectroscopic metallicity and effective temperature: {len(mh_spec_cut)}')
 
 
+# -------------- Limit [Fe/H] values between 0.5 and -1.5 -------------------
+feh_range = (mh_spec_cut['mh_gspspec'] < 0.5) & (mh_spec_cut['mh_gspspec'] > -1.5)
+feh_cut = mh_spec_cut[feh_range]
+print(f'number of sources with metallcities in the valid range: {len(feh_cut)}')
 
 
 #--------- Remove unresolved binary sources ----------
 #binary_mask = (uncut_data['ruwe'] < 1.2) & (uncut_data['non_single_star'] == 0)
 #binary_cut = uncut_data[binary_mask]
-binary_mask = (mh_spec_cut['ruwe'] < 1.2) & (mh_spec_cut['non_single_star'] == 0)
-binary_cut = mh_spec_cut[binary_mask]
+binary_mask = (feh_cut['ruwe'] < 1.2) & (feh_cut['non_single_star'] == 0)
+binary_cut = feh_cut[binary_mask]
 print(f'Number of sources after binary removal: {len(binary_cut)}')
 
 
@@ -85,20 +89,20 @@ bp_rp = vary_cut['phot_bp_mean_mag'] - vary_cut['phot_rp_mean_mag'] - vary_cut['
 
 #------------ Remove sources less luminous than the oldest isochrone ------------
 # Create the mask for high metallicity
-high_metallicity = vary_cut['mh_gspspec'] > -1.5
+#high_metallicity = vary_cut['mh_gspspec'] > -1.5
 
 # Initialize G_cut as all 3.8
-G_cut = np.full(len(vary_cut), 3.8)
+#G_cut = np.full(len(vary_cut), 3.8)
 
 # Apply the linear relation for higher metallicity stars 
-G_cut[high_metallicity] = vary_cut['mh_gspspec'][high_metallicity] * 0.3 + 4.5
+#G_cut[high_metallicity] = vary_cut['mh_gspspec'][high_metallicity] * 0.3 + 4.5
 
 # Now, select sources that are dimmer than the subgiant branch cut
-dim_G = Gmag > G_cut
+#dim_G = Gmag > G_cut
 
 # Apply the mask to filter out dim sources
-vary_cut = vary_cut[~dim_G]
-Kmag = Kmag[~dim_G]
+#vary_cut = vary_cut[~dim_G]
+#Kmag = Kmag[~dim_G]
 
 
 
@@ -130,12 +134,15 @@ giant_cut = vary_cut[giants]
 print(f'Number of giants: {len(giant_cut)}')
 
 import random
-idx = np.array(random.sample(range(len(giant_cut)), 10000))
+idx = np.array(random.sample(range(len(giant_cut)), 50000))
 sample = giant_cut[idx]
 
 # Build fits file with only the giants
 giant_fits = fits.BinTableHDU(data=sample)
 giant_fits.writeto('gaia_giants_test_sample.fits', overwrite=True)
+
+
+
 
 
 # toggle to make plot of selected giants on colour magnitude diagram 

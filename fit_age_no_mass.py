@@ -41,7 +41,7 @@ log_L_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, 
 Gaia_G_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid[min_age_ix:]),         
                                     Gaia_G_EDR3[:,:,min_age_ix:],bounds_error=False, method = 'cubic')
 Gaia_BP_RP_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid[min_age_ix:]), 
-                                    Gaia_BP_EDR3[:,:,min_age_ix:] - Gaia_RP_EDR3[:,:,min_age_ix:],bounds_error=False, method = 'cubic')
+                                    Gaia_BP_EDR3[:,:,min_age_ix:] - Gaia_RP_EDR3[:,:,min_age_ix:], bounds_error=False, method = 'cubic')
 #Gaia_BP_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid[min_age_ix:]), 
                                     #Gaia_BP_EDR3[:,:,min_age_ix:],bounds_error=False, method = 'cubic')
 #Gaia_RP_EDR3_interp = RegularGridInterpolator((fractional_mass_grid, metallicity_grid, age_grid[min_age_ix:]), 
@@ -66,14 +66,14 @@ def get_Gaia_magnitudes(mass, metallicity, age):
     return float(Gaia_G_EDR3), float(Gaia_BP_RP_EDR3)   #, float(Gaia_BP_EDR3), float(Gaia_RP_EDR3)
 
 # Create funtion to return the normalised difference between the observed and modelled Gaia G, BP and RP magnitudes
-def residuals_Gaia(params, observed_Gaia_G_EDR3, observed_Gaia_BP_RP_EDR3, Gaia_G_EDR3_err, Gaia_BP_RP_EDR3_err, mass, mass_err, metallicity, metallicity_err):
+def residuals_Gaia(params, observed_Gaia_G_EDR3, observed_Gaia_BP_RP_EDR3, Gaia_G_EDR3_err, Gaia_BP_RP_EDR3_err, metallicity, metallicity_err):
     
     # Get the modelled Gaia G, BP and RP magnitudes for the given mass, metallicity and age
     model_Gaia_G_EDR3, model_Gaia_BP_RP_EDR3 = get_Gaia_magnitudes(*params)
 
     # Calculate the residuals
     residuals = np.array([(observed_Gaia_G_EDR3 - model_Gaia_G_EDR3)/Gaia_G_EDR3_err, (observed_Gaia_BP_RP_EDR3 - model_Gaia_BP_RP_EDR3)/Gaia_BP_RP_EDR3_err,
-                          (params[1] - metallicity)/metallicity_err, (params[0] - mass)/mass_err])
+                          (params[1] - metallicity)/metallicity_err])
     return residuals.flatten()
 
 #Define function to get initial guess from metallicities
@@ -110,7 +110,7 @@ def initial_guess(metallicity_obs, G_mag_obs, BP_RP_mag_obs, G_mag_err, BP_RP_ma
     # Find index
     min_index = np.unravel_index(np.nanargmin(mass_age_chi2_array), mass_age_chi2_array.shape)
     mass_idx, age_idx = min_index
-    chi2_min = mass_age_chi2_array[mass_idx, age_idx]
+    #chi2_min = mass_age_chi2_array[mass_idx, age_idx]
 
     # find corresponding mass and age values
     best_mass = mass_grid[mass_idx]
@@ -118,29 +118,29 @@ def initial_guess(metallicity_obs, G_mag_obs, BP_RP_mag_obs, G_mag_err, BP_RP_ma
 
     # Find confidence interval for mass at the best age
     # Confidence interval on mass at best-fit age (1 parameter: Δχ² = 1.0 for 68.3%)
-    chi2_column_at_best_age = mass_age_chi2_array[:, age_idx]
-    within_confidence = chi2_column_at_best_age <= chi2_min + 1.0
+    #chi2_column_at_best_age = mass_age_chi2_array[:, age_idx]
+    #within_confidence = chi2_column_at_best_age <= chi2_min + 1.0
 
-    if np.any(within_confidence):
-        mass_lower = np.min(mass_grid[within_confidence])
-        mass_upper = np.max(mass_grid[within_confidence])
+    #if np.any(within_confidence):
+        #mass_lower = np.min(mass_grid[within_confidence])
+        #mass_upper = np.max(mass_grid[within_confidence])
         # least square fit only take symmetrical error, so take the average of the lower and upper bounds
-        mass_err = (mass_upper - mass_lower) / 2.0
+        #mass_err = (mass_upper - mass_lower) / 2.0
         # mass error must be greater than the step size of the mass grid
-        if mass_err < (mass_grid[1] - mass_grid[0]):
-            mass_err = (mass_grid[1] - mass_grid[0])
-    else:
+        #if mass_err < (mass_grid[1] - mass_grid[0]):
+            #mass_err = (mass_grid[1] - mass_grid[0])
+    #else:
         # if the confidence interval is not found set mass error to the step size of the mass grid
-        mass_err = (mass_grid[1] - mass_grid[0])
+        #mass_err = (mass_grid[1] - mass_grid[0])
 
 
-    return (best_mass, metallicity_obs, best_log_age), mass_err
+    return (best_mass, metallicity_obs, best_log_age)
 
 # Define function to fit age for give metallicity and Gaia magitudes with errors:
 def fit_age(Fe_H, Fe_H_err, G, G_err, Bp_Rp, Bp_Rp_err):
 
     # get the initial guess from grid search 
-    guess, mass_err = initial_guess(Fe_H, G, Bp_Rp, G_err, Bp_Rp_err)
+    guess = initial_guess(Fe_H, G, Bp_Rp, G_err, Bp_Rp_err)
 
     # Set bounds of least square fit (mass, metallicity, age)
     bounds = (
@@ -151,7 +151,7 @@ def fit_age(Fe_H, Fe_H_err, G, G_err, Bp_Rp, Bp_Rp_err):
     # Run least square fit
     # Set mass error to half the fitted mass - can refine further
     try:
-        fit = least_squares(residuals_Gaia, guess, args=(G, Bp_Rp, G_err, Bp_Rp_err, guess[0], mass_err, Fe_H, Fe_H_err), bounds=bounds)
+        fit = least_squares(residuals_Gaia, guess, args=(G, Bp_Rp, G_err, Bp_Rp_err, Fe_H, Fe_H_err), bounds=bounds)
     except Exception as e:
         print(f"Fit failed for index: {e}")
         return np.array([np.nan, np.nan, np.nan]), np.array([np.nan, np.nan, np.nan])
@@ -167,8 +167,8 @@ def fit_age(Fe_H, Fe_H_err, G, G_err, Bp_Rp, Bp_Rp_err):
 
 # Load the Gaia data from the fits file
 sample = fits.open('gaia_giants_test_sample.fits')
-targets = sample[1].data
-
+targets = sample[1].data[:200]
+#targets = np.where(all['source_id'] == 439766825338229504)[0]
 # Close the fits file
 sample.close()
 
@@ -189,13 +189,13 @@ Arp = np.where(np.isnan(targets['arp_gspphot']), Arp_man, targets['arp_gspphot']
 # Extract errors in extinction
 Ag_err = np.max([np.abs(targets['ag_gspphot_lower']-Ag), np.abs(targets['ag_gspphot_upper']-Ag)], axis=0)
 
-Abp_err_dir = np.max([np.abs(targets['abp_gspphot_lower']-Abp), np.abs(targets['abp_gspphot_upper']-Abp)], axis=0)
-Arp_err_dir = np.max([np.abs(targets['arp_gspphot_lower']-Arp), np.abs(targets['arp_gspphot_upper']-Arp)], axis=0)
-Abp_err_man = np.max([np.abs(targets['ebpminrp_gspphot_lower']*Rbp/(Rbp-Rrp) - Abp), np.abs(targets['ebpminrp_gspphot_upper']*Rbp/(Rbp-Rrp) - Abp)], axis=0)
-Arp_err_man = np.max([np.abs(targets['ebpminrp_gspphot_lower']*Rrp/(Rbp-Rrp) - Arp), np.abs(targets['ebpminrp_gspphot_upper']*Rrp/(Rbp-Rrp) - Arp)], axis=0)
+#Abp_err_dir = np.max([np.abs(targets['abp_gspphot_lower']-Abp), np.abs(targets['abp_gspphot_upper']-Abp)], axis=0)
+#Arp_err_dir = np.max([np.abs(targets['arp_gspphot_lower']-Arp), np.abs(targets['arp_gspphot_upper']-Arp)], axis=0)
+#Abp_err_man = np.max([np.abs(targets['ebpminrp_gspphot_lower']*Rbp/(Rbp-Rrp) - Abp), np.abs(targets['ebpminrp_gspphot_upper']*Rbp/(Rbp-Rrp) - Abp)], axis=0)
+#Arp_err_man = np.max([np.abs(targets['ebpminrp_gspphot_lower']*Rrp/(Rbp-Rrp) - Arp), np.abs(targets['ebpminrp_gspphot_upper']*Rrp/(Rbp-Rrp) - Arp)], axis=0)
 
-Abp_err = np.where(np.isnan(targets['abp_gspphot']), Abp_err_man, Abp_err_dir)
-Arp_err = np.where(np.isnan(targets['arp_gspphot']), Arp_err_man, Arp_err_dir)
+#Abp_err = np.where(np.isnan(targets['abp_gspphot']), Abp_err_man, Abp_err_dir)
+#Arp_err = np.where(np.isnan(targets['arp_gspphot']), Arp_err_man, Arp_err_dir)
 
 bp_err = 2.5/np.log(10) * 1/targets['phot_bp_mean_flux_over_error']
 rp_err = 2.5/np.log(10) * 1/targets['phot_rp_mean_flux_over_error']
@@ -268,8 +268,8 @@ targets_table['bprp'] = bp_rp
 targets_table['bprp_err'] = bp_rp_err
 
 # Save the targets table with fitted parameters to a new fits file
-targets_table.write('gaia_giants_fitted_test_colour.fits', format='fits', overwrite=True)
-print('Fitted parameters saved to gaia_giants_fitted_test_colour.fits')
+targets_table.write('test.fits', format='fits', overwrite=True)
+print('Fitted parameters saved to bad_point_test .fits')
 
 # Open combined isochrone file
 #file = fits.open('isochrones_grid_bprp.fits')
