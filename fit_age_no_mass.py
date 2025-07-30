@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import RegularGridInterpolator
 from scipy.optimize import least_squares
 
+#The input data
+data_file = 'gaia_giants_test_sample.fits'
 
 # Parameters to make the fit better
 min_log_age = 7.5
@@ -12,7 +14,7 @@ min_log_age = 7.5
 # Load fits file with isochrone models
 ff = fits.open('isochrone_models.fits')
 
-#-------------------------------------------------------
+#----------- Change stuff above here ------------------
 # Index of minimum log age
 min_age_ix = np.where(ff['age_grid'].data >= min_log_age)[0][0]
 
@@ -80,8 +82,10 @@ def residuals_Gaia(params, observed_Gaia_G_EDR3, observed_Gaia_BP_RP_EDR3, Gaia_
 def initial_guess(metallicity_obs, G_mag_obs, BP_RP_mag_obs, G_mag_err, BP_RP_mag_err):
 
     # Set up mass grid in physical units of solar mass
-    mass_grid = np.linspace(0.1, 8, 100)
-    log_age_grid = np.linspace(7.0, max(age_grid), 50)
+    # Only include stars that are roughly in the right part of the HR diagram
+    # NB - this will avoid considering young stars.
+    mass_grid = np.linspace(0.3, 3, 40)
+    log_age_grid = np.linspace(9.0, max(age_grid), 20)
 
     # Initialise 2d array to hold chi2 values for the grid search
     mass_age_chi2_array = np.zeros((len(mass_grid), len(log_age_grid)))
@@ -99,12 +103,12 @@ def initial_guess(metallicity_obs, G_mag_obs, BP_RP_mag_obs, G_mag_err, BP_RP_ma
         BP_RP_mag_model = Gaia_BP_RP_EDR3_interp((frac_mass, metallicity_obs, age))
         #RP_mag_model = Gaia_RP_EDR3_interp((frac_mass, metallicity_obs, age))
 
-
         # Find sum of chi2 values of this model
         chi2 = ((G_mag_obs-G_mag_model)/G_mag_err)**2 + ((BP_RP_mag_obs-BP_RP_mag_model)/BP_RP_mag_err)**2 
 
         # Add chi2 value to 2d array 
         mass_age_chi2_array[:,j] = chi2
+    print("Grid search complete")
  
     # Find age and mass of minimum chi2 value
     # Find index
@@ -140,18 +144,21 @@ def initial_guess(metallicity_obs, G_mag_obs, BP_RP_mag_obs, G_mag_err, BP_RP_ma
 def fit_age(Fe_H, Fe_H_err, G, G_err, Bp_Rp, Bp_Rp_err):
 
     # get the initial guess from grid search 
+    print("Guessing")
     guess, mass_err = initial_guess(Fe_H, G, Bp_Rp, G_err, Bp_Rp_err)
+    print(f"Done guessing. Mass and initial error: {guess[0]:.2f}, {mass_err:.2f}")
 
     # Set bounds of least square fit (mass, metallicity, age)
     bounds = (
         [0.09, min(metallicity_grid), min(age_grid)],  # lower bounds
         [20.0, max(metallicity_grid), max(age_grid)]  # upper bounds
     )
-
+    mass_err_in = 10.0 #Set a large mass error to allow the fit to adjust the mass
+    
     # Run least square fit
     # Set mass error to half the fitted mass - can refine further
     try:
-        fit = least_squares(residuals_Gaia, guess, args=(G, Bp_Rp, G_err, Bp_Rp_err, guess[0], mass_err, Fe_H, Fe_H_err), bounds=bounds)
+        fit = least_squares(residuals_Gaia, guess, args=(G, Bp_Rp, G_err, Bp_Rp_err, guess[0], mass_err_in, Fe_H, Fe_H_err), bounds=bounds)
     except Exception as e:
         print(f"Fit failed for index: {e}")
         return np.array([np.nan, np.nan, np.nan]), np.array([np.nan, np.nan, np.nan])
@@ -163,10 +170,18 @@ def fit_age(Fe_H, Fe_H_err, G, G_err, Bp_Rp, Bp_Rp_err):
     # Fitted parameters
     fitted = fit.x
 
+    # Check to see how far the fit is from the initial guess
+    if np.abs(fitted[0] - guess[0]) > 0.1:
+        print(f"Warning: Fitted mass {fitted[0]:.2f} deviates significantly from initial guess {guess[0]:.2f}")
+    # Print the fitted mass, metallicity and age with errors
+    print(f"Fitted mass: {fitted[0]:.2f} ± {errs[0]:.2f}, "
+          f"metallicity: {fitted[1]:.2f} ± {errs[1]:.2f}, "
+          f"age: {fitted[2]:.2f} ± {errs[2]:.2f}")          
+
     return fitted, errs
 
 # Load the Gaia data from the fits file
-sample = fits.open('gaia_giants_test_sample.fits')
+sample = fits.open(data_file)
 targets = sample[1].data
 
 # Close the fits file
@@ -246,8 +261,8 @@ for i in range(len(Fe_H)):
     fitted_age_err.append(errs[2])
 
     # print progress every 100 iterations
-    if i % 100 == 0:
-        print(f'Fitted {i} of {len(Fe_H)} targets')
+    if i % 10 == 0:
+        print(f'Fitted {i+1} of {len(Fe_H)} targets')
 
 
 # Convert targets to an Astropy Table to allow adding new columns
