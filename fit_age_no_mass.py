@@ -10,7 +10,7 @@ from scipy.optimize import least_squares
 #The input data
 data_file = 'isochrones_grid_giants.fits'
 # Name the fits file where results will be stored 
-output_file = 'isochrones_grid_giants_nmfit.fits'
+output_file = 'isochrones_grid_08_nmfit.fits'
 
 # Choose to fit to observational data or isochrone models 
 # Set to True to fit ages to Gaia data
@@ -305,10 +305,10 @@ if model_fit == True:
         true_g = iso_comb['Gaia_G'][i]
         true_bprp = iso_comb['Gaia_BP'][i] - iso_comb['Gaia_RP'][i]
     
-        # perturb true values by the noise using the seeded generator
-        feh_in = rng.normal(loc=true_feh, scale=feh_err)
-        g_in = rng.normal(loc=true_g, scale=mag_err)
-        bprp_in = rng.normal(loc=true_bprp, scale=bprp_err)
+        # perturb true values by the noise using the seeded generator, use half to quoted error to simulate the given two sigma uncertainty
+        feh_in = rng.normal(loc=true_feh, scale=feh_err/2)
+        g_in = rng.normal(loc=true_g, scale=mag_err/2)
+        bprp_in = rng.normal(loc=true_bprp, scale=bprp_err/2)
     
 
         # run least square fit 
