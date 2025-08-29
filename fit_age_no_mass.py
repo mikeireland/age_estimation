@@ -16,7 +16,7 @@ output_file = 'isochrones_grid_08_nmfit.fits'
 # Set to True to fit ages to Gaia data
 Gaia_fit = False
 # Set to True to fit ages to isochone models 
-model_fit = True 
+model_fit = False 
 
 # Set which iron abundance to use for Gaia fit (gspphot, gspspec, cannon_cal)
 feh_type = 'cannon_cal'
@@ -100,7 +100,7 @@ def initial_guess(metallicity_obs, G_mag_obs, BP_RP_mag_obs, G_mag_err, BP_RP_ma
     # Only include stars that are roughly in the right part of the HR diagram
     # NB - this will avoid considering young stars.
     mass_grid = np.linspace(0.3, 3, 200)
-    log_age_grid = np.linspace(9.0, max(age_grid), 50)
+    log_age_grid = np.linspace(8.4, max(age_grid), 50)
 
     # Initialise 2d array to hold chi2 values for the grid search
     mass_age_chi2_array = np.zeros((len(mass_grid), len(log_age_grid)))
@@ -281,7 +281,7 @@ if model_fit == True:
     
     # Open combined isochrone file
     file = fits.open(data_file)
-    iso_comb = file[1].data
+    iso_comb = file[1].data[:10]
     file.close()
 
     # Initialise lists to store fitted parameters
@@ -319,6 +319,10 @@ if model_fit == True:
             fitted = [np.nan, np.nan, np.nan]
             errs = [np.nan, np.nan, np.nan]
 
+            
+        print(f'true parameters: {true_mass:.4f}, {true_feh:.4f}, {true_age:.4f}')
+        print(f'input parameters: Gmag {g_in}, feh {feh_in}, bp-rp {bprp_in}')
+        print(f'fitted parameters: {fitted[0]:.4f} pm {errs[0]:.4f} , {fitted[1]:.4f} pm {errs[1]:.4f}, {fitted[2]:.4f} pm {errs[2]:.4f}')
 
         # Add fitted parameters and errors to the targets table
         fitted_mass.append(fitted[0])
@@ -345,5 +349,5 @@ if model_fit == True:
     table['nm_fitted_age_err'] = fitted_age_err
 
     # Save fitted parameters to the same fits file 
-    table.write(output_file, format='fits', overwrite=True)
-    print(f'Fitted parameters saved to {output_file}')
+    #table.write(output_file, format='fits', overwrite=True)
+    #print(f'Fitted parameters saved to {output_file}')
